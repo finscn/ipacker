@@ -1,1 +1,2 @@
 node ../ipacker.js  -p --name all-in-one
+node ../ipacker.js  -p 1 --name all-in-one

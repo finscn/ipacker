@@ -2,8 +2,8 @@ var ImagePool=ImagePool||{};
 (function(){
 
 var _imgs={
-  "1": {
-    "img": "a",
+  "a-1": {
+    "img": "all-in-one",
     "frame": {
       "x": 322,
       "y": 0,
@@ -13,8 +13,8 @@ var _imgs={
       "oy": 99.5
     }
   },
-  "2": {
-    "img": "a",
+  "a-2": {
+    "img": "all-in-one",
     "frame": {
       "x": 129,
       "y": 0,
@@ -24,8 +24,8 @@ var _imgs={
       "oy": 137
     }
   },
-  "3": {
-    "img": "a",
+  "a-3": {
+    "img": "all-in-one",
     "frame": {
       "x": 0,
       "y": 0,
@@ -35,15 +35,37 @@ var _imgs={
       "oy": 162
     }
   },
-  "4": {
-    "img": "a",
+  "a-4": {
+    "img": "all-in-one",
     "frame": {
-      "x": 0,
+      "x": 270,
       "y": 324,
       "w": 154,
       "h": 138,
       "ox": 77,
       "oy": 65
+    }
+  },
+  "b-1": {
+    "img": "all-in-one",
+    "frame": {
+      "x": 0,
+      "y": 324,
+      "w": 124,
+      "h": 173,
+      "ox": 62,
+      "oy": 92
+    }
+  },
+  "b-2": {
+    "img": "all-in-one",
+    "frame": {
+      "x": 124,
+      "y": 324,
+      "w": 146,
+      "h": 158,
+      "ox": 73,
+      "oy": 67
     }
   }
 };
