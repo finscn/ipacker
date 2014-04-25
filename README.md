@@ -20,6 +20,12 @@ brew install imagemagick
 Second, install [Node.js](http://nodejs.org).
 
 
+Then, run
+```
+npm install
+```
+
+
 ------------------
 
 ### Simple Examples
