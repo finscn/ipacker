@@ -43,7 +43,7 @@ Note: --name <packname> , the packname doesn't include ext-name.
 
 3) the all-in-one.png  will be created in "./output/pack". 
 
-4) the config-info in "./output/pack/img-config"
+4) the mapping-info in "./output/pack/img-mapping"
 
 
 
