@@ -46,7 +46,7 @@ outputDir = Path.normalize(outputDir + "/");
 var trimOutputDir = Path.normalize(outputDir + "/trim/");
 var scaleOutputDir = Path.normalize(outputDir + "/scale/");
 var packOutputDir = Path.normalize(outputDir + "/pack/");
-var imgConfigDir = Path.normalize(packOutputDir + "/img-config/");
+var imgMappingDir = Path.normalize(packOutputDir + "/img-mapping/");
 
 var Config;
 
@@ -109,7 +109,7 @@ if (Config.scale != 1) {
         if (Config.doPack) {
             cleanDir(packOutputDir);
         }
-        cleanDir(imgConfigDir);
+        cleanDir(imgMappingDir);
         start(scaledFiles);
     });
 } else {
@@ -119,7 +119,7 @@ if (Config.scale != 1) {
     if (Config.doPack) {
         cleanDir(packOutputDir);
     }
-    cleanDir(imgConfigDir);
+    cleanDir(imgMappingDir);
     start(inputFiles);
 }
 
@@ -129,37 +129,79 @@ function start(files) {
 
     files = files || inputFiles;
 
-    var filesInfo = startParse(files);
+    var filesInfo = startParse(files, function(filesInfo) {
 
-    if (Config.packOnly) {
 
-        startPack(fileInfo.list, function(fileInfoList, packGroupInfo) {
+        if (Config.packOnly) {
 
-        });
+            startPack(fileInfo.list, function(fileInfoList, packGroupInfo) {
 
-    } else {
-
-        startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
-
-            startPack(fileInfoList, function(fileInfoList, packGroupInfo) {
-
-                var tree = createImagesTree(fileInfoList);
-                console.log(JSON.stringify(tree, null, 2));
-
-                createJS(tree);
             });
 
-        });
+        } else {
 
-    }
+            startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
+
+                startPack(fileInfoList, function(fileInfoList, packGroupInfo) {
+
+                    // var tree = createImagesTree(fileInfoList);
+                    // console.log(JSON.stringify(tree, null, 2));
+                    // createJS(tree);
+
+                    createMapping(fileInfoList);
+                });
+
+            });
+
+        }
+
+    });
 }
+
+
+
+function createMapping(infoList) {
+    if (infoList.length < 1) {
+        console.log("==== Nothing to do ====");
+        return;
+    }
+    console.log("\n\n");
+
+    var code1 = "var ImageMapping=ImageMapping||{};\n(function(){";
+    // var code2 = "Image.merge(ImageMapping,_imgs);\n\n}());";
+    var code2 = "for (var key in _imgs){ ImageMapping[key]=_imgs[key]; }\n\n})();";
+
+    var mapping = {};
+    infoList.forEach(function(info) {
+        if (info.imageInfo) {
+            var f = {
+                img: info.packBy,
+                x: info.imageInfo.x,
+                y: info.imageInfo.y,
+                w: info.imageInfo.w,
+                h: info.imageInfo.h,
+                ox: info.imageInfo.ox,
+                oy: info.imageInfo.oy,
+            }
+            mapping[info.baseName] = f;
+        }
+    });
+    var outputStr = "var _imgs=" + JSON.stringify(mapping, function(k, v) {
+        return v
+    }, 2) + ";";
+    var code = code1 + "\n\n" + outputStr + "\n\n" + code2;
+
+    var js = Path.normalize(imgMappingDir + Config.packName + ".js");
+    fs.writeFileSync(js, code);
+}
+
 
 
 function createImagesTree(fileInfoList) {
 
     var tree = {};
     var root = tree;
-    if (Config.packBy == "all" || Config.packBy == 0) {
+    if (Config.packBy == "all") {
         root = tree[Config.packName] = {};
     }
 
@@ -170,15 +212,17 @@ function createImagesTree(fileInfoList) {
             key = parts[i];
             obj = obj[key] = obj[key] || {};
         }
-        obj.img = info.packBy;
-        if (info.trimedInfo) {
+        // obj.img = info.packBy;
+        obj.origName = info.baseName;
+        if (info.imageInfo) {
             var f = {
-                x: info.trimedInfo.x,
-                y: info.trimedInfo.y,
-                w: info.trimedInfo.w,
-                h: info.trimedInfo.h,
-                ox: info.trimedInfo.ox,
-                oy: info.trimedInfo.oy,
+                img: info.packBy,
+                x: info.imageInfo.x,
+                y: info.imageInfo.y,
+                w: info.imageInfo.w,
+                h: info.imageInfo.h,
+                ox: info.imageInfo.ox,
+                oy: info.imageInfo.oy,
             }
             obj.frame = f;
         }
@@ -187,29 +231,33 @@ function createImagesTree(fileInfoList) {
 
 }
 
-function createJS(configGroup) {
-    var keys = Object.keys(configGroup);
+
+function createJS(tree) {
+    var keys = Object.keys(tree);
     if (keys.length < 1) {
         console.log("==== Nothing to do ====");
         return;
     }
-
     console.log("\n\n");
 
     var code1 = "var ImagePool=ImagePool||{};\n(function(){";
     // var code2 = "Image.merge(ImagePool,_imgs);\n\n}());";
     var code2 = "for (var key in _imgs){ ImagePool[key]=_imgs[key]; }\n\n})();";
 
-    for (var key in configGroup) {
-        // var config = {};
-        // config[key] = configGroup[key];
-        var config = configGroup[key];
+    var config;
+    for (var key in tree) {
+        if (Config.packBy == "all") {
+            config = tree[key];
+        } else {
+            config = {};
+            config[key] = tree[key];
+        }
         var outputStr = "var _imgs=" + JSON.stringify(config, function(k, v) {
             return v
         }, 2) + ";";
         var code = code1 + "\n\n" + outputStr + "\n\n" + code2;
 
-        var js = Path.normalize(imgConfigDir + key + ".js");
+        var js = Path.normalize(imgMappingDir + key + ".js");
         fs.writeFileSync(js, code);
 
         console.log("{id: \"" + key + "\", src: \"" + Config.resDir + key + Config.imgFileExtName + "\" },");
@@ -217,11 +265,11 @@ function createJS(configGroup) {
     console.log("\n\n");
 
 
-    for (var key in configGroup) {
-        console.log('<script src="../output/pack/img-config/' + key + '.js"></script>');
+    for (var key in tree) {
+        console.log('<script src="../output/pack/img-mapping/' + key + '.js"></script>');
     }
     console.log("<script>var ResList=[");
-    for (var key in configGroup) {
+    for (var key in tree) {
         console.log("{id: \"" + key + "\", src: \"../output/pack/" + key + Config.imgFileExtName + "\" },");
     }
     console.log("];</script>");
@@ -233,26 +281,38 @@ function createJS(configGroup) {
 }
 
 
-function startParse(fileList) {
+function startParse(fileList,cb) {
 
     var filesInfo = {
         list: [],
         map: {}
     };
 
-    fileList.forEach(function(file) {
+    var count = fileList.length;
+    var idx = -1;
+    var $next = function() {
+        idx++;
+        if (idx >= count) {
+            cb && cb(filesInfo);
+            return;
+        }
+        var file = fileList[idx];
         var info = {
             orignalFile: file,
             file: null
         };
         filesInfo.list.push(info);
         filesInfo.map[info.orignalFile] = info;
-
         var parsedInfo = parseOrignalFileName(info.orignalFile, Config.packBy);
         overide(info, parsedInfo);
-
-    });
-
+        info.imageInfo={};
+        readImageSize(info.orignalFile, info.imageInfo, function() {
+            info.imageInfo.ow=info.imageInfo.w * Config.sourceOrignalX;
+            info.imageInfo.oh=info.imageInfo.h * Config.sourceOrignalY;
+            $next();
+        });
+    }
+    $next();
 
     return filesInfo;
 }
@@ -283,14 +343,15 @@ function parseOrignalFileName(orignalFile, packBy) {
     }
     info.imgFile = imgFile;
 
-    packBy = packBy && packBy !== 0 ? packBy : Config.packBy;
+    packBy = packBy || packBy === 0 ? packBy : Config.packBy;
 
     if (packBy === "all") {
         info.packBy = Config.packName;
         info.parts = [baseName];
     } else if (packBy === 0) {
         info.packBy = (info.firstDir || Config.packName) //+ Config.imgFileExtName;
-        info.parts = [baseName];
+        // info.parts = [baseName];
+        info.parts = [info.packBy, baseName];
     } else {
         var p = [];
         for (var i = 0; i < packBy; i++) {
@@ -318,7 +379,7 @@ function startPack(fileInfoList, cb) {
         list.push(_info);
 
         list = packTrimInfo[_info.packBy] = packTrimInfo[_info.packBy] || [];
-        list.push(_info.trimedInfo)
+        list.push(_info.imageInfo)
     });
 
     var packsInfo = [];
@@ -394,13 +455,13 @@ function startTrim(fileInfoList, cb) {
             }
             trimFilesInfo.map[info.imgFile].push(info);
 
-            computeTrimInfo(info.imgFile, function(trimedInfo) {
-                trimedInfo.w += Config.imgSpace;
-                trimedInfo.h += Config.imgSpace;
-                trimedInfo.ox = trimedInfo.sw * Config.sourceOrignalX - trimedInfo.sx + Config.imgSpace / 2,
-                trimedInfo.oy = trimedInfo.sh * Config.sourceOrignalY - trimedInfo.sy + Config.imgSpace / 2,
+            computeTrimInfo(info.imgFile, function(imageInfo) {
+                imageInfo.w += Config.imgSpace;
+                imageInfo.h += Config.imgSpace;
+                imageInfo.ox = imageInfo.sw * Config.sourceOrignalX - imageInfo.sx + Config.imgSpace / 2,
+                imageInfo.oy = imageInfo.sh * Config.sourceOrignalY - imageInfo.sy + Config.imgSpace / 2,
 
-                info.trimedInfo = trimedInfo;
+                info.imageInfo = imageInfo;
 
                 $next();
             });
@@ -578,7 +639,7 @@ function computeTrimInfo(img, cb) {
             var offset = rs[3].split("+").slice(1, 3);
             var sourceSize = rs[3].split("+")[0].split("x");
 
-            var trimedInfo = {
+            var imageInfo = {
                 sx: Number(offset[0]),
                 sy: Number(offset[1]),
                 sw: Number(sourceSize[0]),
@@ -588,7 +649,7 @@ function computeTrimInfo(img, cb) {
                 trimedFile: getTrimedImageName(img),
             };
             if (cb) {
-                cb(trimedInfo)
+                cb(imageInfo)
             }
         }
     });
@@ -738,15 +799,15 @@ function parseNumberAttr(attr) {
 
 
 
-function readImageSize(imgPath, frame, cb) {
+function readImageSize(imgPath, info, cb) {
 
     imageMagick(imgPath).size(function(err, value) {
         if (err) {
             console.log(imgPath, err);
             return;
         } else {
-            frame.w = value.width;
-            frame.h = value.height;
+            info.w = value.width;
+            info.h = value.height;
         }
         if (cb) {
             cb();
