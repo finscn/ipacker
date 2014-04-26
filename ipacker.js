@@ -19,6 +19,8 @@ program
     .option("-n --name [string]", "packed file's name")
     .option('-w --width [int number]', "pack file's min width")
     .option('-h --height [int number]', "pack file's min height")
+    .option('--ox [number]', "the orignal X in the image")
+    .option('--oy [number]', "the orignal Y in the image")
     .option('--split [string]', 'file-part split char')
     .option('-s --scale [number]', 'scale all images')
     .option('-p --pack [int number]', 'pack by a part of nameParts: all,0,1,2,3,4... "all" is all-in-one')
@@ -78,8 +80,8 @@ var Config;
         split: program.split || "-",
 
         optipng: false,
-        sourceOrignalX: "50%",
-        sourceOrignalY: "50%",
+        sourceOrignalX: program.ox || "50%",
+        sourceOrignalY: program.oy || "50%",
         trimBgColor: "transparent",
         packBgColor: "transparent",
         imgFileExtName: ".png",
@@ -300,9 +302,9 @@ function startParse(fileList, cb) {
             info.imageInfo.w = w + Config.imgSpace;
             info.imageInfo.h = h + Config.imgSpace;
             var f = parsePercent(Config.sourceOrignalX);
-            var ox = f === false ? Config.sourceOrignalX || 0 : w * f;
+            var ox = f === false ? parseFloat(Config.sourceOrignalX) || 0 : w * f;
             var f = parsePercent(Config.sourceOrignalY);
-            var oy = f === false ? Config.sourceOrignalY || 0 : h * f;
+            var oy = f === false ? parseFloat(Config.sourceOrignalY) || 0 : h * f;
 
             info.imageInfo.ox = ox + Config.imgSpace / 2;
             info.imageInfo.oy = oy + Config.imgSpace / 2;
@@ -458,9 +460,9 @@ function startTrim(fileInfoList, cb) {
                 imageInfo.h += Config.imgSpace;
 
                 var f = parsePercent(Config.sourceOrignalX);
-                var ox = f === false ? Config.sourceOrignalX || 0 : imageInfo.sw * f;
+                var ox = f === false ? parseFloat(Config.sourceOrignalX) || 0 : imageInfo.sw * f;
                 var f = parsePercent(Config.sourceOrignalY);
-                var oy = f === false ? Config.sourceOrignalY || 0 : imageInfo.sh * f;
+                var oy = f === false ? parseFloat(Config.sourceOrignalY) || 0 : imageInfo.sh * f;
 
                 imageInfo.ox = ox + Config.imgSpace / 2 - imageInfo.sx;
                 imageInfo.oy = oy + Config.imgSpace / 2 - imageInfo.sy;
