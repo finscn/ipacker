@@ -37,7 +37,7 @@ npm install
 2) run:
 
 ```
-node ipacker  -p --name all-in-one
+node ipacker.js  -p --name all-in-one
 ```
 Note: --name <packname> , the packname doesn't include ext-name.
 
