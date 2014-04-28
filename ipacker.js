@@ -1,3 +1,5 @@
+"use strict";
+
 var fs = require('fs');
 var cp = require('child_process');
 var Path = require('path');
@@ -53,7 +55,6 @@ var imgMappingDir = Path.normalize(packOutputDir + "/img-mapping/");
 var Config;
 
 (function() {
-
     var packBy = program.pack || 0;
     var packageWidth = parseInt(program.width, 10) || 64; // 64 128 256 512 1024 2048
     var packageHeight = parseInt(program.height, 10) || 64;
@@ -61,7 +62,7 @@ var Config;
     var name = program.name || "all_pack";
     var packOnly = program.packonly || false;
     var configOnly = program.configonly || false;
-    var imgSpace = parseInt(program.margin, 10) || 4;
+    var borderSpace = parseInt(program.margin || 2, 10);
 
     if (packBy != "all") {
         packBy = parseInt(packBy || 0, 10) || 0;
@@ -73,7 +74,7 @@ var Config;
         packageHeight: packageHeight,
         scale: scale,
         packName: name,
-        imgSpace: imgSpace,
+        borderSpace: borderSpace,
         doTrim: !configOnly,
         doPack: !configOnly,
         packOnly: packOnly,
@@ -298,16 +299,16 @@ function startParse(fileList, cb) {
             y: 0,
             imgFile: info.imgFile
         };
+        var imageInfo = info.imageInfo;
         readImageSize(info.orignalFile, function(w, h) {
-            info.imageInfo.w = w + Config.imgSpace;
-            info.imageInfo.h = h + Config.imgSpace;
-            var f = parsePercent(Config.sourceOrignalX);
-            var ox = f === false ? parseFloat(Config.sourceOrignalX) || 0 : w * f;
-            var f = parsePercent(Config.sourceOrignalY);
-            var oy = f === false ? parseFloat(Config.sourceOrignalY) || 0 : h * f;
+            imageInfo.sx = 0;
+            imageInfo.sy = 0;
+            imageInfo.sw = w;
+            imageInfo.sh = h;
+            imageInfo.w = w;
+            imageInfo.h = h
 
-            info.imageInfo.ox = ox + Config.imgSpace / 2;
-            info.imageInfo.oy = oy + Config.imgSpace / 2;
+            computeImageSize(imageInfo);
 
             $next();
         });
@@ -316,6 +317,7 @@ function startParse(fileList, cb) {
 
     return filesInfo;
 }
+
 
 
 function parseOrignalFileName(orignalFile, packBy) {
@@ -427,7 +429,7 @@ function startTrim(fileInfoList, cb) {
 
 
     var count = fileInfoList.length;
-    idx = -1;
+    var idx = -1;
     var $next = function() {
         idx++;
         if (idx >= count) {
@@ -456,16 +458,7 @@ function startTrim(fileInfoList, cb) {
             trimFilesInfo.map[info.imgFile].push(info);
 
             computeTrimInfo(info.imgFile, function(imageInfo) {
-                imageInfo.w += Config.imgSpace;
-                imageInfo.h += Config.imgSpace;
-
-                var f = parsePercent(Config.sourceOrignalX);
-                var ox = f === false ? parseFloat(Config.sourceOrignalX) || 0 : imageInfo.sw * f;
-                var f = parsePercent(Config.sourceOrignalY);
-                var oy = f === false ? parseFloat(Config.sourceOrignalY) || 0 : imageInfo.sh * f;
-
-                imageInfo.ox = ox + Config.imgSpace / 2 - imageInfo.sx;
-                imageInfo.oy = oy + Config.imgSpace / 2 - imageInfo.sy;
+                computeImageSize(imageInfo);
                 info.imageInfo = imageInfo;
                 $next();
             });
@@ -526,10 +519,10 @@ function computePackInfo(imgInfoList, cb) {
             var f = imgInfoList[n];
             if (f.fit) {
                 // 'image Over 100,100 225,225 image.jpg'
-                var x = f.fit.x + Config.imgSpace / 2,
-                    y = f.fit.y + Config.imgSpace / 2;
-                // var w = f.fit.w - Config.imgSpace,
-                //     h = f.fit.h - Config.imgSpace;
+                var x = f.fit.x + Config.borderSpace,
+                    y = f.fit.y + Config.borderSpace;
+                // var w = f.fit.w - Config.borderSpace * 2,
+                //     h = f.fit.h - Config.borderSpace * 2;
                 f.x = f.fit.x;
                 f.y = f.fit.y;
                 delete f.fit;
@@ -543,8 +536,6 @@ function computePackInfo(imgInfoList, cb) {
 
     var width = Config.packageWidth;
     var height = Config.packageHeight;
-
-
 
     do {
         var expanded = false,
@@ -575,6 +566,19 @@ function computePackInfo(imgInfoList, cb) {
 }
 
 
+function computeImageSize(imageInfo) {
+    imageInfo.sx -= Config.borderSpace;
+    imageInfo.sy -= Config.borderSpace;
+    imageInfo.w += Config.borderSpace * 2;
+    imageInfo.h += Config.borderSpace * 2;
+    var f = parsePercent(Config.sourceOrignalX);
+    var ox = f === false ? parseFloat(Config.sourceOrignalX) || 0 : imageInfo.sw * f;
+    var f = parsePercent(Config.sourceOrignalY);
+    var oy = f === false ? parseFloat(Config.sourceOrignalY) || 0 : imageInfo.sh * f;
+    imageInfo.ox = ox - imageInfo.sx;
+    imageInfo.oy = oy - imageInfo.sy;
+}
+
 
 function packImages(packInfo, cb) {
     var imgInfoList = packInfo.imgInfoList;
@@ -588,7 +592,7 @@ function packImages(packInfo, cb) {
         packedImg = packedImg.draw("image", "Over", imgInfo.x + "," + imgInfo.y, 0 + "," + 0, imgInfo.imgFile);
     });
 
-    packedImg = packedImg.trim().borderColor(Config.packBgColor).border(Config.imgSpace / 2, Config.imgSpace / 2);
+    packedImg = packedImg.trim().borderColor(Config.packBgColor).border(Config.borderSpace, Config.borderSpace);
     packedImg.write(packedFile, function(err) {
         if (err) {
             console.log("packRect err : ", packedFile, err);
@@ -642,7 +646,6 @@ function computeTrimInfo(img, cb) {
             var size = rs[2].split("x");
             var offset = rs[3].split("+").slice(1, 3);
             var sourceSize = rs[3].split("+")[0].split("x");
-
             var imageInfo = {
                 sx: Number(offset[0]),
                 sy: Number(offset[1]),
@@ -681,7 +684,7 @@ function trimImages(imageFiles, cb) {
             wrench.mkdirSyncRecursive(dir);
         }
 
-        // imageMagick(img).trim().borderColor(Config.trimBgColor).write(trimedFile, function(err) {
+        // imageMagick(img).trim().borderColor(Config.trimBgColor).border(Config.borderSpace, Config.borderSpace).write(trimedFile, function(err) {
         imageMagick(img).trim().write(trimedFile, function(err) {
             if (err) {
                 console.log("trimImage err : ", err);
