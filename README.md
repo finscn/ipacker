@@ -25,6 +25,11 @@ Then, run
 npm install
 ```
 
+### Help Info
+
+```
+node ipacker.js --help
+```
 
 ------------------
 
