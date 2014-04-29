@@ -55,7 +55,7 @@ var imgMappingDir = Path.normalize(packOutputDir + "/img-mapping/");
 var Config;
 
 (function() {
-    var packBy = program.pack || 0;
+    var packBy = program.pack;
     var packageWidth = parseInt(program.width, 10) || 64; // 64 128 256 512 1024 2048
     var packageHeight = parseInt(program.height, 10) || 64;
     var scale = Number(program.scale) || 1;
@@ -64,10 +64,10 @@ var Config;
     var configOnly = program.configonly || false;
     var borderSpace = parseInt(program.margin || 2, 10);
 
+    packBy=packBy===true?"all":packBy;
     if (packBy != "all") {
         packBy = parseInt(packBy || 0, 10) || 0;
     }
-
     Config = {
         packBy: packBy,
         packageWidth: packageWidth,
