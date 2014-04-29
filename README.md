@@ -8,7 +8,7 @@ A  node.js  tools  for packing some images into one.
 
 ### Getting started
 
-First, download and install [ImageMagick](http://http://www.imagemagick.org/). 
+First, download and install [ImageMagick](http://www.imagemagick.org/). 
 
 In Mac OS X, you can simply use Homebrew and do:
 
