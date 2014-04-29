@@ -18,19 +18,23 @@ program
     .version('0.5')
     .option('-i --input [string]', 'input dir name')
     .option('-o --output [string]', 'output dir name')
+    .option('-p --pack [int number/"all"]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
     .option("-n --name [string]", "packed file's name")
-    .option('-w --width [int number]', "pack file's min width")
-    .option('-h --height [int number]', "pack file's min height")
-    .option('--ox [number]', "the orignal X in the image")
-    .option('--oy [number]', "the orignal Y in the image")
-    .option('--split [string]', 'file-part split char')
+    .option('--width [int number]', "pack file's min width")
+    .option('--height [int number]', "pack file's min height")
+    .option('--ox [number/percent]', "the orignal X in source images. number means n pixel.\n\t percent(e.g. 35%) means the position of width")
+    .option('--oy [number/percent]', "the orignal Y in source images. number means n pixel.\n\t percent(e.g. 35%) means the position of height")
     .option('-s --scale [number]', 'scale all images')
-    .option('-p --pack [int number]', 'pack by a part of nameParts: all,0,1,2,3,4... "all" is all-in-one')
     .option('-m --margin [int number]', "the margin of one image")
+    .option('--split [string]', 'file-part split char')
     .option('--packonly', "only pack (and scale),  not trim")
     .option('--configonly ', "create config file only")
     .parse(process.argv);
 
+if (process.argv.length<3){
+    program.help();
+    process.exit();
+}
 
 var cwd = process.env.PWD || process.cwd();
 
