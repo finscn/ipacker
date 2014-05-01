@@ -836,7 +836,6 @@ function copyFileSync(srcFile, destFile) {
     }
     if (fs.existsSync(destFile)) {
         fs.unlinkSync(destFile);
-        return;
     }
     var contents = fs.readFileSync(srcFile);
     fs.writeFileSync(destFile, contents);
