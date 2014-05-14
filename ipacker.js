@@ -31,7 +31,7 @@ program
     .option('--configonly ', "create config file only")
     .parse(process.argv);
 
-if (process.argv.length<3){
+if (process.argv.length < 3) {
     program.help();
     process.exit();
 }
@@ -68,7 +68,7 @@ var Config;
     var configOnly = program.configonly || false;
     var borderSpace = parseInt(program.margin || 2, 10);
 
-    packBy=packBy===true?"all":packBy;
+    packBy = packBy === true ? "all" : packBy;
     if (packBy != "all") {
         packBy = parseInt(packBy || 0, 10) || 0;
     }
@@ -85,8 +85,8 @@ var Config;
         split: program.split || "-",
 
         optipng: false,
-        sourceOrignalX: program.ox || "50%",
-        sourceOrignalY: program.oy || "50%",
+        sourceOrignalX: program.ox || 0, //"50%",
+        sourceOrignalY: program.oy || 0, //"50%",
         trimBgColor: "transparent",
         packBgColor: "transparent",
         imgFileExtName: ".png",
@@ -380,11 +380,12 @@ function startPack(fileInfoList, cb) {
     var packGroupInfo = {};
 
     var packTrimInfo = {};
-    fileInfoList.forEach(function(_info) {
+    fileInfoList.forEach(function(_info, idx) {
         var list = packGroupInfo[_info.packBy] = packGroupInfo[_info.packBy] || [];
         list.push(_info);
 
         list = packTrimInfo[_info.packBy] = packTrimInfo[_info.packBy] || [];
+        _info.imageInfo._index = idx;
         list.push(_info.imageInfo)
     });
 
@@ -393,7 +394,7 @@ function startPack(fileInfoList, cb) {
 
         var imgInfoList = packTrimInfo[packBy];
         var packedFile = Path.normalize(packOutputDir + "/" + packBy + Config.imgFileExtName);
-        var size = computePackInfo(imgInfoList);
+        var size = preparePackImages(imgInfoList);
         packsInfo.push({
             packBy: packBy,
             imgInfoList: imgInfoList,
@@ -505,8 +506,84 @@ function startScale(cb) {
 ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
 
+function preparePackImages(imgInfoList, width, height, space) {
+    space = space || 0;
+    var maxWidth = width || 2048;
+    var maxHeight = height || 2048;
+    imgInfoList.forEach(function(info) {
+        // delete info.fit;
+        info.w += space;
+        info.h += space;
+        if (info.w > maxWidth) {
+            maxWidth = info.w;
+        }
+        if (info.h > maxHeight) {
+            maxHeight = info.h;
+        }
+    });
 
-function computePackInfo(imgInfoList, cb) {
+    imgInfoList.sort(function(a, b) {
+        // return Math.max(b.w,b.h) - Math.max(a.w,a.h);
+        var d = b.h - a.h;
+        d = d ? d : b.w - a.w;
+        return d ? d : b.index - a.index;
+        // return b.w - a.w;
+    });
+
+    var packInfo;
+    var packInfoH = computePackInfo(imgInfoList, maxWidth, maxHeight);
+    if (packInfoH[1]) {
+        imgInfoList.sort(function(a, b) {
+            var d = b.w - a.w;
+            d = d ? d : b.h - a.h;
+            return d ? d : b.index - a.index;
+            // return Math.max(b.w,b.h) - Math.max(a.w,a.h);
+            // return b.h - a.h;
+        });
+        packInfoW = computePackInfo(imgInfoList, maxWidth, maxHeight);
+        if (packInfoW[1] && packInfoH[1].length < packInfoW[1].length) {
+            packInfo = packInfoH;
+        } else {
+            packInfo = packInfoW;
+        }
+    } else {
+        packInfo = packInfoH;
+    }
+    var packed = packInfo[0];
+
+    var unpacked = packInfo[1];
+    if (unpacked) {
+        console.log("Images are too many or too big");
+        // preparePackImages(unpacked, width, height, packedIndex + 1);
+    }
+    return [packInfo[2], packInfo[3]];
+}
+
+function computePackInfo(imgInfoList, maxWidth, maxHeight) {
+    var out = false;
+    for (var n = 0; n < imgInfoList.length; n++) {
+        var f = imgInfoList[n];
+        delete f.fit;
+    }
+    var packer = new GrowingPacker(maxWidth, maxHeight);
+    packer.fit(imgInfoList);
+
+    var packed = [];
+    var unpacked = [];
+    for (var n = 0; n < imgInfoList.length; n++) {
+        var f = imgInfoList[n];
+        if (f.fit) {
+            f.x = f.fit.x;
+            f.y = f.fit.y;
+            packed.push(f);
+        } else {
+            unpacked.push(f);
+        }
+    }
+    return [packed, unpacked.length > 0 ? unpacked : null, packer.root.w, packer.root.h];
+}
+
+function _computePackInfo(imgInfoList, cb) {
 
     var compute = function(width, height, imgInfoList) {
 
@@ -544,12 +621,10 @@ function computePackInfo(imgInfoList, cb) {
     do {
         var expanded = false,
             out = false;
-
         imgInfoList.sort(function(a, b) {
             return b.h - a.h;
         });
         out = compute(width, height, imgInfoList);
-
         if (out) {
             imgInfoList.sort(function(a, b) {
                 return b.w - a.w;
@@ -798,7 +873,7 @@ function scaleImage(img, outImg, scale, cb) {
 
 
 function parsePercent(percent) {
-    if (String(percent).indexOf("%")) {
+    if (String(percent).indexOf("%")>0) {
         var p = parseInt(percent, 10);
         return p / 100;
     }
