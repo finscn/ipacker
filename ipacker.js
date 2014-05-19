@@ -62,7 +62,7 @@ var Config;
     var packBy = program.pack;
     var packageWidth = parseInt(program.width, 10) || 64; // 64 128 256 512 1024 2048
     var packageHeight = parseInt(program.height, 10) || 64;
-    var scale = Number(program.scale) || 1;
+    var scale = program.scale || "100%";
     var name = program.name || "all_pack";
     var packOnly = program.packonly || false;
     var configOnly = program.configonly || false;
@@ -665,10 +665,9 @@ function packImages(packInfo, cb) {
     var size = packInfo.size;
     var width = size[0],
         height = size[1];
-
     var packedImg = imageMagick(width, height, Config.packBgColor);
     imgInfoList.forEach(function(imgInfo) {
-        packedImg = packedImg.draw("image", "Over", imgInfo.x + "," + imgInfo.y, 0 + "," + 0, imgInfo.imgFile);
+        packedImg = packedImg.draw("image", "Over", imgInfo.x + "," + imgInfo.y, 0 + "," + 0, "\""+imgInfo.imgFile+"\"");
     });
 
     packedImg = packedImg.trim().borderColor(Config.packBgColor).border(Config.borderSpace, Config.borderSpace);
@@ -832,13 +831,23 @@ function scaleImages(imageFiles, scale, cb) {
             copyFileSync(img, outScaleImg);
             $next();
         } else {
-            scaleImage(img, outScaleImg, scale, function() {
+            resizeImage(img, scale, scale, outScaleImg, function(){
                 $next();
             });
+            // scaleImage(img, outScaleImg, scale, function() {
+            //     $next();
+            // });
         }
         idx++;
     }
     $next();
+}
+
+function resizeImage(img, scaleX, scaleY, outImg, cb) {
+    var cmd;
+    // cmd='convert ' + img + ' -resize ' + scaleX + 'x' + scaleY + '! ' + outImg;
+    cmd = 'convert -define filter:blur=0.5 -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! ' + img + ' ' + outImg;
+    callCmd(cmd, cb);
 }
 
 function scaleImage(img, outImg, scale, cb) {
@@ -946,6 +955,15 @@ function cleanDir(dir) {
     wrench.mkdirSyncRecursive(dir);
 }
 
+function callCmd(cmd, cb) {
+    cp.exec(cmd, function(err, stdout, stderr) {
+        // console.log(cmd);
+        if (stderr) {
+            console.log(stderr)
+        }
+        cb && cb(stdout);
+    });
+}
 
 ///////////////////////////////////
 ///////////////////////////////////
