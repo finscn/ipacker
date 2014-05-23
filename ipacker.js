@@ -175,6 +175,8 @@ function createMapping(infoList) {
                 h: info.imageInfo.h,
                 ox: info.imageInfo.ox,
                 oy: info.imageInfo.oy,
+                sw: info.imageInfo.sw,
+                sh: info.imageInfo.sh,
             }
             mapping[info.baseName] = f;
         }
@@ -215,7 +217,7 @@ function createImagesTree(fileInfoList) {
                 w: info.imageInfo.w,
                 h: info.imageInfo.h,
                 ox: info.imageInfo.ox,
-                oy: info.imageInfo.oy,
+                oy: info.imageInfo.oy
             }
             obj.frame = f;
         }
@@ -654,8 +656,11 @@ function computeImageSize(imageInfo) {
     var ox = f === false ? parseFloat(Config.sourceOrignalX) || 0 : imageInfo.sw * f;
     var f = parsePercent(Config.sourceOrignalY);
     var oy = f === false ? parseFloat(Config.sourceOrignalY) || 0 : imageInfo.sh * f;
-    imageInfo.ox = ox - imageInfo.sx;
-    imageInfo.oy = oy - imageInfo.sy;
+    // imageInfo.ox = ox - imageInfo.sx;
+    // imageInfo.oy = oy - imageInfo.sy;
+    imageInfo.ox = imageInfo.sx - ox;
+    imageInfo.oy = imageInfo.sy - oy;
+
 }
 
 
@@ -667,7 +672,7 @@ function packImages(packInfo, cb) {
         height = size[1];
     var packedImg = imageMagick(width, height, Config.packBgColor);
     imgInfoList.forEach(function(imgInfo) {
-        packedImg = packedImg.draw("image", "Over", imgInfo.x + "," + imgInfo.y, 0 + "," + 0, "\""+imgInfo.imgFile+"\"");
+        packedImg = packedImg.draw("image", "Over", imgInfo.x + "," + imgInfo.y, 0 + "," + 0, "\"" + imgInfo.imgFile + "\"");
     });
 
     packedImg = packedImg.trim().borderColor(Config.packBgColor).border(Config.borderSpace, Config.borderSpace);
@@ -831,7 +836,7 @@ function scaleImages(imageFiles, scale, cb) {
             copyFileSync(img, outScaleImg);
             $next();
         } else {
-            resizeImage(img, scale, scale, outScaleImg, function(){
+            resizeImage(img, scale, scale, outScaleImg, function() {
                 $next();
             });
             // scaleImage(img, outScaleImg, scale, function() {
@@ -882,7 +887,7 @@ function scaleImage(img, outImg, scale, cb) {
 
 
 function parsePercent(percent) {
-    if (String(percent).indexOf("%")>0) {
+    if (String(percent).indexOf("%") > 0) {
         var p = parseInt(percent, 10);
         return p / 100;
     }
