@@ -19,16 +19,18 @@ program
     .option('-i --input [string]', 'input dir name')
     .option('-o --output [string]', 'output dir name')
     .option('-p --pack [int number/"all"]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
+    .option('-s --scale [number/percent]', 'scale all images')
+    .option('-t --trim', "trim all images")
     .option("-n --name [string]", "packed file's name")
     .option('--width [int number]', "pack file's min width")
     .option('--height [int number]', "pack file's min height")
     .option('--ox [number/percent]', "the orignal X in source images. number means n pixel.\n\t percent(e.g. 35%) means the position of width")
     .option('--oy [number/percent]', "the orignal Y in source images. number means n pixel.\n\t percent(e.g. 35%) means the position of height")
-    .option('-s --scale [number]', 'scale all images')
     .option('-m --margin [int number]', "the margin of one image")
+    .option('--flipX', "flipX images")
+    .option('--flipY', "flipY images")
     .option('--split [string]', 'file-part split char')
-    .option('--packonly', "only pack (and scale),  not trim")
-    .option('--configonly ', "create config file only")
+    .option('--configOnly', "create config file only")
     .parse(process.argv);
 
 if (process.argv.length < 3) {
@@ -51,10 +53,17 @@ var outputDir = program.output || "./output/";
 inputDir = Path.normalize(inputDir + "/");
 outputDir = Path.normalize(outputDir + "/");
 
+var orignalInputDir = inputDir;
+var orignalOutputDir = outputDir;
+
 var trimOutputDir = Path.normalize(outputDir + "/trim/");
 var scaleOutputDir = Path.normalize(outputDir + "/scale/");
 var packOutputDir = Path.normalize(outputDir + "/pack/");
 var imgMappingDir = Path.normalize(packOutputDir + "/img-mapping/");
+
+var inputFiles;
+var allImagesInfo;
+var trimImagesInfo;
 
 var Config;
 
@@ -63,13 +72,13 @@ var Config;
     var packageWidth = parseInt(program.width, 10) || 64; // 64 128 256 512 1024 2048
     var packageHeight = parseInt(program.height, 10) || 64;
     var scale = program.scale || "100%";
+    var trim = program.trim || false;
     var name = program.name || "all_pack";
-    var packOnly = program.packonly || false;
-    var configOnly = program.configonly || false;
+    var configOnly = program.configOnly || false;
     var borderSpace = parseInt(program.margin || 2, 10);
 
     packBy = packBy === true ? "all" : packBy;
-    if (packBy != "all") {
+    if (packBy && packBy != "all") {
         packBy = parseInt(packBy || 0, 10) || 0;
     }
     Config = {
@@ -77,75 +86,84 @@ var Config;
         packageWidth: packageWidth,
         packageHeight: packageHeight,
         scale: scale,
+        trim: trim,
         packName: name,
         borderSpace: borderSpace,
-        doTrim: !configOnly,
         doPack: !configOnly,
-        packOnly: packOnly,
+        doScale: !configOnly,
+        doTrim: !configOnly,
         split: program.split || "-",
-
         optipng: false,
         sourceOrignalX: program.ox || 0, //"50%",
         sourceOrignalY: program.oy || 0, //"50%",
+        flipY: program.flipY || false, //"50%",
+        flipX: program.flipX || false, //"50%",
         trimBgColor: "transparent",
         packBgColor: "transparent",
         imgFileExtName: ".png",
         cfgFileExtName: ".txt",
         resDir: "res/image/",
         dirPart: 2,
-    }
-
+    };
 }());
 
 
-var allImagesInfo;
-var trimImagesInfo;
 
-var orignalInputDir = inputDir;
-var inputFiles = getFiles(inputDir);
 
-if (Config.scale != 1) {
-    cleanDir(scaleOutputDir);
-    startScale(function() {
-        var scaledFiles = getFiles(scaleOutputDir);
-        inputDir = scaleOutputDir;
+function main() {
 
-        if (Config.doTrim) {
-            cleanDir(trimOutputDir);
+    console.log("\n");
+
+    inputFiles = getFiles(inputDir);
+
+    if (Config.scale != "100%") {
+        if (Config.doScale) {
+            cleanDir(scaleOutputDir);
+            startScale(function() {
+                console.log("\n");
+                var scaledFiles = getFiles(scaleOutputDir);
+                inputDir = scaleOutputDir;
+                start(scaledFiles);
+            });
+        } else {
+            var scaledFiles = getFiles(scaleOutputDir);
+            inputDir = scaleOutputDir;
+            start(scaledFiles);
         }
-        if (Config.doPack) {
-            cleanDir(packOutputDir);
-        }
-        cleanDir(imgMappingDir);
-        start(scaledFiles);
-    });
-} else {
-    if (Config.doTrim) {
-        cleanDir(trimOutputDir);
+    } else {
+        start(inputFiles);
     }
-    if (Config.doPack) {
-        cleanDir(packOutputDir);
-    }
-    cleanDir(imgMappingDir);
-    start(inputFiles);
 }
 
+main();
 
 
 function start(files) {
 
+    if (Config.doTrim && Config.trim) {
+        cleanDir(trimOutputDir);
+    }
+    if (Config.doPack && Config.packBy) {
+        cleanDir(packOutputDir);
+    }
+
     files = files || inputFiles;
 
     startParse(files, function(filesInfo) {
-        if (Config.packOnly) {
-            startPack(filesInfo.list, function(fileInfoList, packGroupInfo) {
-                createMapping(fileInfoList);
-            });
-        } else {
+        if (Config.packBy && Config.trim) {
             startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
+                console.log("\n");
                 startPack(fileInfoList, function(fileInfoList, packGroupInfo) {
                     createMapping(fileInfoList);
                 });
+            });
+        } else if (Config.packBy) {
+            startPack(filesInfo.list, function(fileInfoList, packGroupInfo) {
+                createMapping(fileInfoList);
+            });
+        } else if (Config.trim) {
+            startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
+                console.log("\n");
             });
         }
     });
@@ -154,11 +172,11 @@ function start(files) {
 
 
 function createMapping(infoList) {
+
     if (infoList.length < 1) {
         console.log("==== Nothing to do ====");
         return;
     }
-    console.log("\n\n");
 
     var code1 = "var ImageMapping=ImageMapping||{};\n(function(){";
     // var code2 = "Image.merge(ImageMapping,_imgs);\n\n}());";
@@ -188,6 +206,11 @@ function createMapping(infoList) {
 
     var js = Path.normalize(imgMappingDir + Config.packName + ".js");
     fs.writeFileSync(js, code);
+
+    console.log("==== Mapping-file created : "+js+" ====");
+
+    console.log("\n\n");
+
 }
 
 
@@ -379,6 +402,8 @@ function parseOrignalFileName(orignalFile, packBy) {
 
 function startPack(fileInfoList, cb) {
 
+    cleanDir(imgMappingDir);
+
     var packGroupInfo = {};
 
     var packTrimInfo = {};
@@ -480,9 +505,6 @@ function startTrim(fileInfoList, cb) {
 function startScale(cb) {
 
     scaleImages(inputFiles, Config.scale, function(scale) {
-        console.log("\n\n");
-        console.log("==== all images scaled : " + scale + " ====");
-
         cb && cb();
     });
 }
@@ -849,20 +871,29 @@ function scaleImages(imageFiles, scale, cb) {
 }
 
 function resizeImage(img, scaleX, scaleY, outImg, cb) {
+    // return scaleImage(img,scaleX,outImg,cb);
+    var flipX = Config.flipX;
+    var flipY = Config.flipY;
+    var flip = (flipX ? '-flop ' : '') + (flipY ? '-flip ' : '');
     var cmd;
     // cmd='convert ' + img + ' -resize ' + scaleX + 'x' + scaleY + '! ' + outImg;
-    cmd = 'convert -define filter:blur=0.5 -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! ' + img + ' ' + outImg;
-    callCmd(cmd, cb);
+    cmd = 'convert ' + flip + ' -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! ' + img + ' ' + outImg;
+    // cmd='convert ' + img + ' -adaptive-resize ' + scaleX + 'x' + scaleY + '! ' + outImg;
+    // cmd = 'convert -define filter:blur=0.5 -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! ' + img + ' ' + outImg;
+    callCmd(cmd, function(){
+        console.log("==== scaled : " + (outImg) + " ====");
+        cb && cb();
+    });
 }
 
-function scaleImage(img, outImg, scale, cb) {
+function scaleImage(img, scale, outImg, cb) {
 
     imageMagick(img).scale(scale).write(outImg, function(err) {
         if (err) {
             console.log("scaleImage err : ", err);
             return;
         }
-        console.log("==== image scaled : " + (outImg) + " ====");
+        console.log("==== scaled : " + (outImg) + " ====");
 
         cb && cb();
     });
