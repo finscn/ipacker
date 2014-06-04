@@ -547,35 +547,16 @@ function preparePackImages(imgInfoList, width, height, space) {
     });
 
     imgInfoList.sort(function(a, b) {
-        // return Math.max(b.w,b.h) - Math.max(a.w,a.h);
         var d = b.h - a.h;
         d = d ? d : b.w - a.w;
+        // var d = Math.max(b.w,b.h) - Math.max(a.w,a.h);
         return d ? d : b.index - a.index;
-        // return b.w - a.w;
     });
 
-    var packInfo;
-    var packInfoH = computePackInfo(imgInfoList, maxWidth, maxHeight);
-    if (packInfoH[1]) {
-        imgInfoList.sort(function(a, b) {
-            var d = b.w - a.w;
-            d = d ? d : b.h - a.h;
-            return d ? d : b.index - a.index;
-            // return Math.max(b.w,b.h) - Math.max(a.w,a.h);
-            // return b.h - a.h;
-        });
-        packInfoW = computePackInfo(imgInfoList, maxWidth, maxHeight);
-        if (packInfoW[1] && packInfoH[1].length < packInfoW[1].length) {
-            packInfo = packInfoH;
-        } else {
-            packInfo = packInfoW;
-        }
-    } else {
-        packInfo = packInfoH;
-    }
+    var packInfo = computePackInfo(imgInfoList, maxWidth, maxHeight);
     var packed = packInfo[0];
-
     var unpacked = packInfo[1];
+
     if (unpacked) {
         console.log("Images are too many or too big");
         // preparePackImages(unpacked, width, height, packedIndex + 1);
