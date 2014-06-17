@@ -65,6 +65,9 @@ var inputFiles;
 var allImagesInfo;
 var trimImagesInfo;
 
+var packMaxWidth = 2048;
+var packMaxHeight = 2048;
+
 var Config;
 
 (function() {
@@ -196,6 +199,7 @@ function createMapping(infoList) {
                 sw: info.imageInfo.sw,
                 sh: info.imageInfo.sh,
             }
+
             mapping[info.baseName] = f;
         }
     });
@@ -207,7 +211,7 @@ function createMapping(infoList) {
     var js = Path.normalize(imgMappingDir + Config.packName + ".js");
     fs.writeFileSync(js, code);
 
-    console.log("==== Mapping-file created : "+js+" ====");
+    console.log("==== Mapping-file created : " + js + " ====");
 
     console.log("\n\n");
 
@@ -337,7 +341,7 @@ function startParse(fileList, cb) {
             imageInfo.w = w;
             imageInfo.h = h
 
-            computeImageSize(imageInfo);
+            computeImageSize(imageInfo, info.orignalFile);
 
             $next();
         });
@@ -490,7 +494,7 @@ function startTrim(fileInfoList, cb) {
             trimFilesInfo.map[info.imgFile].push(info);
 
             computeTrimInfo(info.imgFile, function(imageInfo) {
-                computeImageSize(imageInfo);
+                computeImageSize(imageInfo, info.imgFile);
                 info.imageInfo = imageInfo;
                 $next();
             });
@@ -532,8 +536,8 @@ function startScale(cb) {
 
 function preparePackImages(imgInfoList, width, height, space) {
     space = space || 0;
-    var maxWidth = width || 2048;
-    var maxHeight = height || 2048;
+    var maxWidth = width || packMaxWidth;
+    var maxHeight = height || packMaxHeight;
     imgInfoList.forEach(function(info) {
         // delete info.fit;
         info.w += space;
@@ -650,7 +654,8 @@ function _computePackInfo(imgInfoList, cb) {
 }
 
 
-function computeImageSize(imageInfo) {
+function computeImageSize(imageInfo, fileName) {
+    var sy = imageInfo.sy
     imageInfo.sx -= Config.borderSpace;
     imageInfo.sy -= Config.borderSpace;
     imageInfo.w += Config.borderSpace * 2;
@@ -663,7 +668,6 @@ function computeImageSize(imageInfo) {
     // imageInfo.oy = oy - imageInfo.sy;
     imageInfo.ox = imageInfo.sx - ox;
     imageInfo.oy = imageInfo.sy - oy;
-
 }
 
 
@@ -726,17 +730,17 @@ function packImages(packInfo, cb) {
 
 
 function computeTrimInfo(img, cb) {
-    cp.exec("convert " + img + " -trim info:-", function(err, stdout, stderr) {
+    cp.exec("convert -border 1x1 -bordercolor transparent " + img + " -trim info:-", function(err, stdout, stderr) {
         if (stdout) {
             var rs = stdout.trim().split(" ");
             var size = rs[2].split("x");
             var offset = rs[3].split("+").slice(1, 3);
             var sourceSize = rs[3].split("+")[0].split("x");
             var imageInfo = {
-                sx: Number(offset[0]),
-                sy: Number(offset[1]),
-                sw: Number(sourceSize[0]),
-                sh: Number(sourceSize[1]),
+                sx: Number(offset[0]) - 1,
+                sy: Number(offset[1]) - 1,
+                sw: Number(sourceSize[0]) - 2,
+                sh: Number(sourceSize[1]) - 2,
                 w: Number(size[0]),
                 h: Number(size[1]),
                 imgFile: getTrimedImageName(img),
@@ -861,7 +865,7 @@ function resizeImage(img, scaleX, scaleY, outImg, cb) {
     cmd = 'convert ' + flip + ' -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! ' + img + ' ' + outImg;
     // cmd='convert ' + img + ' -adaptive-resize ' + scaleX + 'x' + scaleY + '! ' + outImg;
     // cmd = 'convert -define filter:blur=0.5 -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! ' + img + ' ' + outImg;
-    callCmd(cmd, function(){
+    callCmd(cmd, function() {
         console.log("==== scaled : " + (outImg) + " ====");
         cb && cb();
     });
