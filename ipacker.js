@@ -6,13 +6,8 @@ var Path = require('path');
 var wrench = require('wrench');
 var glob = require('glob');
 var program = require('commander');
-var gm = require('gm');
 
-var imageMagick = gm.subClass({
-    imageMagick: true
-});
 var GrowingPacker = require('./lib/packer.growing').GrowingPacker;
-var Packer = require('./lib/packer').Packer;
 
 program
     .version('0.5')
@@ -426,6 +421,9 @@ function startPack(fileInfoList, cb) {
         var imgInfoList = packTrimInfo[packBy];
         var packedFile = Path.normalize(packOutputDir + "/" + packBy + Config.imgFileExtName);
         var size = preparePackImages(imgInfoList);
+        if (!size) {
+            return;
+        }
         packsInfo.push({
             packBy: packBy,
             imgInfoList: imgInfoList,
@@ -534,6 +532,30 @@ function startScale(cb) {
 ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
 
+var SortImageRule = {
+    "maxHeightFirst": function(a, b) {
+        var d = b.h - a.h;
+        d = d ? d : b.w - a.w;
+        return d ? d : b.index - a.index;
+    },
+    "maxWidthFirst": function(a, b) {
+        var d = b.w - a.w;
+        d = d ? d : b.h - a.h;
+        return d ? d : b.index - a.index;
+    },
+    "maxSideFirst": function(a, b) {
+        var d = Math.max(b.w, b.h) - Math.max(a.w, a.h);
+        d = d ? d : b.h - a.h;
+        d = d ? d : b.w - a.w;
+        return d ? d : b.index - a.index;
+    },
+    "maxAreaFirst": function(a, b) {
+        var d = b.w * b.h - a.w * a.h;
+        d = d ? d : b.h - a.h;
+        return d ? d : b.index - a.index;
+    }
+};
+
 function preparePackImages(imgInfoList, width, height, space) {
     space = space || 0;
     var maxWidth = width || packMaxWidth;
@@ -550,22 +572,61 @@ function preparePackImages(imgInfoList, width, height, space) {
         }
     });
 
-    imgInfoList.sort(function(a, b) {
-        var d = b.h - a.h;
-        d = d ? d : b.w - a.w;
-        // var d = Math.max(b.w,b.h) - Math.max(a.w,a.h);
-        return d ? d : b.index - a.index;
-    });
+    var packedAllList = [];
+    var packed, unpacked, width, height;
+    var sn = 0;
+    for (var key in SortImageRule) {
+        var fn = SortImageRule[key];
+        imgInfoList.sort(fn);
+        var packInfo = computePackInfo(imgInfoList, maxWidth, maxHeight);
+        unpacked = packInfo[1];
+        if (unpacked) {
+            continue;
+        }
+        packed = packInfo[0];
+        width = packInfo[2];
+        height = packInfo[3];
+        var binWidth = Math.pow(2, Math.ceil(Math.log(width) / Math.log(2)));
+        var binHeight = Math.pow(2, Math.ceil(Math.log(height) / Math.log(2)));
+        packedAllList.push([packed, unpacked, width, height, width * height, binWidth * binHeight, sn++, key]);
+    }
 
-    var packInfo = computePackInfo(imgInfoList, maxWidth, maxHeight);
-    var packed = packInfo[0];
-    var unpacked = packInfo[1];
-
-    if (unpacked) {
+    if (packedAllList.length < 1) {
         console.log("Images are too many or too big");
+        return null;
         // preparePackImages(unpacked, width, height, packedIndex + 1);
     }
-    return [packInfo[2], packInfo[3]];
+
+    packedAllList.sort(function(a, b) {
+        var binAreaA = a[5],
+            binAreaB = b[5];
+        var areaA = a[4],
+            areaB = b[4];
+        var d = binAreaA - binAreaB;
+        d = d ? d : areaA - areaB;
+        d = d ? d : a[3] - b[3];
+        d = d ? d : a[6] - b[6];
+        return d
+    });
+    packed = packedAllList[0][0];
+    unpacked = packedAllList[0][1];
+    width = packedAllList[0][2];
+    height = packedAllList[0][3];
+
+    console.log("SortImageRule : " + packedAllList[0][7]);
+    packed.forEach(function(p, idx) {
+        var f = p[0],
+            fit = p[1];
+        f.fit = null;
+        f.x = fit.x;
+        f.y = fit.y;
+        f.inRight = fit.inRight;
+        f.inDown = fit.inDown;
+        f.index = fit.index;
+        packed[idx] = f;
+
+    });
+    return [width, height];
 }
 
 function computePackInfo(imgInfoList, maxWidth, maxHeight) {
@@ -582,75 +643,12 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
     for (var n = 0; n < imgInfoList.length; n++) {
         var f = imgInfoList[n];
         if (f.fit) {
-            f.x = f.fit.x;
-            f.y = f.fit.y;
-            packed.push(f);
+            packed.push([f, f.fit]);
         } else {
             unpacked.push(f);
         }
     }
     return [packed, unpacked.length > 0 ? unpacked : null, packer.root.w, packer.root.h];
-}
-
-function _computePackInfo(imgInfoList, cb) {
-
-    var compute = function(width, height, imgInfoList) {
-
-        var out = false;
-
-        for (var n = 0; n < imgInfoList.length; n++) {
-            var f = imgInfoList[n];
-            delete f.fit;
-        }
-
-        var packer = new Packer(width, height);
-        packer.fit(imgInfoList);
-        for (var n = 0; n < imgInfoList.length; n++) {
-            var f = imgInfoList[n];
-            if (f.fit) {
-                // 'image Over 100,100 225,225 image.jpg'
-                var x = f.fit.x + Config.borderSpace,
-                    y = f.fit.y + Config.borderSpace;
-                // var w = f.fit.w - Config.borderSpace * 2,
-                //     h = f.fit.h - Config.borderSpace * 2;
-                f.x = f.fit.x;
-                f.y = f.fit.y;
-                delete f.fit;
-            } else {
-                out = true;
-                break;
-            }
-        }
-        return out;
-    };
-
-    var width = Config.packageWidth;
-    var height = Config.packageHeight;
-
-    do {
-        var expanded = false,
-            out = false;
-        imgInfoList.sort(function(a, b) {
-            return b.h - a.h;
-        });
-        out = compute(width, height, imgInfoList);
-        if (out) {
-            imgInfoList.sort(function(a, b) {
-                return b.w - a.w;
-            });
-            out = compute(width, height, imgInfoList);
-        }
-
-        if (out) {
-            if (width <= height) {
-                width = width * 2;
-            } else {
-                height = height * 2;
-            }
-            expanded = true;
-        }
-    } while (expanded);
-    return [width, height];
 }
 
 
@@ -670,6 +668,13 @@ function computeImageSize(imageInfo, fileName) {
     imageInfo.oy = imageInfo.sy - oy;
 }
 
+// create blank image
+// "-size", width + "x" + height "xc:"+ color
+
+// draw image
+// stroke
+// font
+// write
 
 function packImages(packInfo, cb) {
     var imgInfoList = packInfo.imgInfoList;
@@ -677,25 +682,35 @@ function packImages(packInfo, cb) {
     var size = packInfo.size;
     var width = size[0],
         height = size[1];
-    var packedImg = imageMagick(width, height, Config.packBgColor);
-    imgInfoList.forEach(function(imgInfo) {
-        packedImg = packedImg.draw("image", "Over", imgInfo.x + "," + imgInfo.y, 0 + "," + 0, "\"" + imgInfo.imgFile + "\"");
+
+    var cmd = ['convert',
+        '-size',
+        width + 'x' + height,
+        'xc:' + Config.packBgColor
+    ];
+
+    imgInfoList.forEach(function(imgInfo, idx) {
+        cmd = cmd.concat(drawImage(imgInfo.imgFile, imgInfo.x, imgInfo.y));
+
+        // cmd = cmd.concat(strokeRect(imgInfo.x, imgInfo.y, imgInfo.w, imgInfo.h, 2, "red"));
+        // cmd = cmd.concat(fillText(imgInfo.index, imgInfo.x + 4, imgInfo.y + 16, 16, 'SourceSansProL'));
     });
 
-    packedImg = packedImg.trim().borderColor(Config.packBgColor).border(Config.borderSpace, Config.borderSpace);
-    packedImg.write(packedFile, function(err) {
-        if (err) {
-            console.log("packRect err : ", packedFile, err);
-            return;
-        }
+    cmd = cmd.concat([
+        '-trim',
+        '-bordercolor',
+        Config.packBgColor,
+        '-border',
+        Config.borderSpace + 'x' + Config.borderSpace,
+        '"' + packedFile + '"'
+    ]);
+
+    callCmd(cmd.join(' '), function(err) {
         console.log("==== packed: " + packedFile + " ====");
         if (Config.optipng) {
             console.log("start optipng " + packedFile + " ...");
-            cp.exec("optipng -o4 " + packedFile, function(err, stdout, stderr) {
-                if (err) {
-                    console.log("optipng err : ", err);
-                    return;
-                }
+            var cmd = 'optipng -o4 "' + packedFile + '"';
+            callCmd(cmd, function(stdout) {
                 cb && cb();
             });
         } else {
@@ -705,7 +720,44 @@ function packImages(packInfo, cb) {
 }
 
 
+function drawImage(img, x, y) {
+    return [
+        '-draw',
+        '"image Over',
+        x + ',' + y,
+        0 + ',' + 0,
+        '\\"' + img + '\\""'
+    ];
+}
 
+function strokeRect(x, y, w, h, lineWidth, color) {
+    return [
+        '-strokewidth',
+        lineWidth || 1,
+        '-stroke',
+        color || 'black',
+        '-fill',
+        'none',
+        '-draw',
+        '"rectangle',
+        x + ',' + y, (x + w) + ',' + (y + h),
+        '"'
+    ];
+}
+
+function fillText(text, x, y, size, font) {
+    return [
+        '-pointsize',
+        size || 12,
+        '-font',
+        '"' + font + '"',
+        '-draw',
+        '"text', x + ',' + y,
+        '\\"' + text + '\\"',
+        '"'
+    ];
+
+}
 
 
 
@@ -730,7 +782,8 @@ function packImages(packInfo, cb) {
 
 
 function computeTrimInfo(img, cb) {
-    cp.exec("convert -border 1x1 -bordercolor transparent " + img + " -trim info:-", function(err, stdout, stderr) {
+    var cmd = 'convert -border 1x1 -bordercolor transparent "' + img + '" -trim info:-';
+    callCmd(cmd, function(stdout) {
         if (stdout) {
             var rs = stdout.trim().split(" ");
             var size = rs[2].split("x");
@@ -774,21 +827,23 @@ function trimImages(imageFiles, cb) {
             wrench.mkdirSyncRecursive(dir);
         }
 
-        // imageMagick(img).trim().borderColor(Config.trimBgColor).border(Config.borderSpace, Config.borderSpace).write(trimedFile, function(err) {
-        imageMagick(img).trim().write(trimedFile, function(err) {
-            if (err) {
-                console.log("trimImage err : ", err);
-                return;
-            }
+        trimImg(img, trimedFile, function() {
             trimedFiles[img] = trimedFile;
-
-            console.log("==== trimed: " + trimedFile + " ====");
-
             $next();
         });
 
     }
     $next();
+}
+
+// 'convert output/scale/PlatformA-1.png -trim output/trim/PlatformA-1.png'
+
+function trimImg(img, outImg, cb) {
+    var cmd = 'convert "' + img + '" -trim "' + outImg + '"';
+    callCmd(cmd, function() {
+        console.log("==== trimed : " + outImg + " ====");
+        cb && cb();
+    });
 }
 
 
@@ -846,9 +901,6 @@ function scaleImages(imageFiles, scale, cb) {
             resizeImage(img, scale, scale, outScaleImg, function() {
                 $next();
             });
-            // scaleImage(img, outScaleImg, scale, function() {
-            //     $next();
-            // });
         }
         idx++;
     }
@@ -861,28 +913,16 @@ function resizeImage(img, scaleX, scaleY, outImg, cb) {
     var flipY = Config.flipY;
     var flip = (flipX ? '-flop ' : '') + (flipY ? '-flip ' : '');
     var cmd;
-    // cmd='convert ' + img + ' -resize ' + scaleX + 'x' + scaleY + '! ' + outImg;
-    cmd = 'convert ' + flip + ' -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! ' + img + ' ' + outImg;
-    // cmd='convert ' + img + ' -adaptive-resize ' + scaleX + 'x' + scaleY + '! ' + outImg;
-    // cmd = 'convert -define filter:blur=0.5 -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! ' + img + ' ' + outImg;
+    // cmd='convert "' + img + '"" -resize ' + scaleX + 'x' + scaleY + '! "' + outImg + '"';
+    cmd = 'convert ' + flip + ' -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! "' + img + '" "' + outImg + '"';
+    // cmd='convert "' + img + '" -adaptive-resize ' + scaleX + 'x' + scaleY + '! "' + outImg + '"';
+    // cmd = 'convert -define filter:blur=0.5 -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! "' + img + '" "' + outImg + '"';
     callCmd(cmd, function() {
-        console.log("==== scaled : " + (outImg) + " ====");
+        console.log("==== scaled : " + outImg + " ====");
         cb && cb();
     });
 }
 
-function scaleImage(img, scale, outImg, cb) {
-
-    imageMagick(img).scale(scale).write(outImg, function(err) {
-        if (err) {
-            console.log("scaleImage err : ", err);
-            return;
-        }
-        console.log("==== scaled : " + (outImg) + " ====");
-
-        cb && cb();
-    });
-}
 
 
 ////////////////////////////////////////////////////////////
@@ -922,15 +962,14 @@ function parseNumberAttr(attr) {
 
 
 function readImageSize(imgPath, cb) {
+    var cmd;
+    cmd = 'identify -ping -format %wx%h "' + imgPath + '"';
+    callCmd(cmd, function(stdout) {
+        var split = stdout.trim().split(" ").shift().split("x");
+        var width = parseInt(split[0], 10),
+            height = parseInt(split[1], 10);
 
-    imageMagick(imgPath).size(function(err, size) {
-        if (err) {
-            console.log(imgPath, err);
-            return;
-        }
-        if (cb) {
-            cb(size.width, size.height);
-        }
+        cb && cb(width, height);
     });
 }
 
@@ -979,8 +1018,11 @@ function cleanDir(dir) {
 function callCmd(cmd, cb) {
     cp.exec(cmd, function(err, stdout, stderr) {
         // console.log(cmd);
-        if (stderr) {
-            console.log(stderr)
+        err = err || stderr;
+        if (err) {
+            console.log(cmd)
+            console.log(err);
+            return;
         }
         cb && cb(stdout);
     });

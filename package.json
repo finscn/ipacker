@@ -12,7 +12,6 @@
   "dependencies": {
     "wrench": "~1.5.8",
     "glob": "~3.2.9",
-    "commander": "~2.2.0",
-    "gm": "~1.14.2"
+    "commander": "~2.2.0"
   }
 }
