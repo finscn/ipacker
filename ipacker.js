@@ -13,9 +13,9 @@ program
     .version('0.5')
     .option('-i --input [string]', 'input dir name')
     .option('-o --output [string]', 'output dir name')
-    .option('-p --pack [int number/"all"]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
     .option('-s --scale [number/percent]', 'scale all images')
-    .option('-t --trim', "trim all images")
+    .option('-t --trim [trim color]', "trim all images, default trim color is transparent")
+    .option('-p --pack [int number/"all"]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
     .option("-n --name [string]", "packed file's name")
     .option('--width [int number]', "pack file's min width")
     .option('--height [int number]', "pack file's min height")
@@ -51,8 +51,8 @@ outputDir = Path.normalize(outputDir + "/");
 var orignalInputDir = inputDir;
 var orignalOutputDir = outputDir;
 
-var trimOutputDir = Path.normalize(outputDir + "/trim/");
 var scaleOutputDir = Path.normalize(outputDir + "/scale/");
+var trimOutputDir = Path.normalize(outputDir + "/trim/");
 var packOutputDir = Path.normalize(outputDir + "/pack/");
 var imgMappingDir = Path.normalize(packOutputDir + "/img-mapping/");
 
@@ -66,27 +66,30 @@ var packMaxHeight = 2048;
 var Config;
 
 (function() {
+    var scale = program.scale || "100%";
+    var trimBy = program.trim;
     var packBy = program.pack;
+    var name = program.name || "all_pack";
     var packageWidth = parseInt(program.width, 10) || 64; // 64 128 256 512 1024 2048
     var packageHeight = parseInt(program.height, 10) || 64;
-    var scale = program.scale || "100%";
-    var trim = program.trim || false;
-    var name = program.name || "all_pack";
     var configOnly = program.configOnly || false;
-    var borderSpace = parseInt(program.margin || 2, 10);
+    var borderWidth = parseInt(program.margin || 2, 10);
+
+    trimBy = trimBy === true ? "transparent" : (trimBy || false);
 
     packBy = packBy === true ? "all" : packBy;
     if (packBy && packBy != "all") {
         packBy = parseInt(packBy || 0, 10) || 0;
     }
+
     Config = {
+        scale: scale,
+        trimBy: trimBy,
         packBy: packBy,
+        packName: name,
+        borderWidth: borderWidth,
         packageWidth: packageWidth,
         packageHeight: packageHeight,
-        scale: scale,
-        trim: trim,
-        packName: name,
-        borderSpace: borderSpace,
         doPack: !configOnly,
         doScale: !configOnly,
         doTrim: !configOnly,
@@ -96,7 +99,6 @@ var Config;
         sourceOrignalY: program.oy || 0, //"50%",
         flipY: program.flipY || false, //"50%",
         flipX: program.flipX || false, //"50%",
-        trimBgColor: "transparent",
         packBgColor: "transparent",
         imgFileExtName: ".png",
         cfgFileExtName: ".txt",
@@ -138,7 +140,7 @@ main();
 
 function start(files) {
 
-    if (Config.doTrim && Config.trim) {
+    if (Config.doTrim && Config.trimBy) {
         cleanDir(trimOutputDir);
     }
     if (Config.doPack && Config.packBy) {
@@ -148,7 +150,7 @@ function start(files) {
     files = files || inputFiles;
 
     startParse(files, function(filesInfo) {
-        if (Config.packBy && Config.trim) {
+        if (Config.packBy && Config.trimBy) {
             startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
                 console.log("\n");
                 startPack(fileInfoList, function(fileInfoList, packGroupInfo) {
@@ -159,7 +161,7 @@ function start(files) {
             startPack(filesInfo.list, function(fileInfoList, packGroupInfo) {
                 createMapping(fileInfoList);
             });
-        } else if (Config.trim) {
+        } else if (Config.trimBy) {
             startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
                 console.log("\n");
             });
@@ -654,10 +656,10 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
 
 function computeImageSize(imageInfo, fileName) {
     var sy = imageInfo.sy
-    imageInfo.sx -= Config.borderSpace;
-    imageInfo.sy -= Config.borderSpace;
-    imageInfo.w += Config.borderSpace * 2;
-    imageInfo.h += Config.borderSpace * 2;
+    imageInfo.sx -= Config.borderWidth;
+    imageInfo.sy -= Config.borderWidth;
+    imageInfo.w += Config.borderWidth * 2;
+    imageInfo.h += Config.borderWidth * 2;
     var f = parsePercent(Config.sourceOrignalX);
     var ox = f === false ? parseFloat(Config.sourceOrignalX) || 0 : imageInfo.sw * f;
     var f = parsePercent(Config.sourceOrignalY);
@@ -668,13 +670,6 @@ function computeImageSize(imageInfo, fileName) {
     imageInfo.oy = imageInfo.sy - oy;
 }
 
-// create blank image
-// "-size", width + "x" + height "xc:"+ color
-
-// draw image
-// stroke
-// font
-// write
 
 function packImages(packInfo, cb) {
     var imgInfoList = packInfo.imgInfoList;
@@ -686,7 +681,7 @@ function packImages(packInfo, cb) {
     var cmd = ['convert',
         '-size',
         width + 'x' + height,
-        'xc:' + Config.packBgColor
+        'xc:"' + Config.packBgColor + '"'
     ];
 
     imgInfoList.forEach(function(imgInfo, idx) {
@@ -697,11 +692,11 @@ function packImages(packInfo, cb) {
     });
 
     cmd = cmd.concat([
-        '-trim',
         '-bordercolor',
-        Config.packBgColor,
-        '-border',
-        Config.borderSpace + 'x' + Config.borderSpace,
+        '"'+Config.packBgColor+'"',
+        '-compose copy',
+        '-border 1x1',
+        '-trim',
         '"' + packedFile + '"'
     ]);
 
@@ -782,7 +777,7 @@ function fillText(text, x, y, size, font) {
 
 
 function computeTrimInfo(img, cb) {
-    var cmd = 'convert -border 1x1 -bordercolor transparent "' + img + '" -trim info:-';
+    var cmd = 'convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy -border 1x1 -trim info:-';
     callCmd(cmd, function(stdout) {
         if (stdout) {
             var rs = stdout.trim().split(" ");
@@ -832,14 +827,16 @@ function trimImages(imageFiles, cb) {
             $next();
         });
 
-    }
+    };
+
     $next();
 }
 
 // 'convert output/scale/PlatformA-1.png -trim output/trim/PlatformA-1.png'
 
 function trimImg(img, outImg, cb) {
-    var cmd = 'convert "' + img + '" -trim "' + outImg + '"';
+    var cmd = 'convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy -border 1x1 -trim -bordercolor "' + Config.trimBy + '" -compose copy -border ' + Config.borderWidth + 'x' + Config.borderWidth + ' "' + outImg + '"';
+    // var cmd = 'convert "' + img + '" -trim "' + outImg + '"';
     callCmd(cmd, function() {
         console.log("==== trimed : " + outImg + " ====");
         cb && cb();
@@ -1016,6 +1013,7 @@ function cleanDir(dir) {
 }
 
 function callCmd(cmd, cb) {
+    // console.log(cmd)
     cp.exec(cmd, function(err, stdout, stderr) {
         // console.log(cmd);
         err = err || stderr;
