@@ -15,6 +15,7 @@ program
     .option('-o --output [string]', 'output dir name')
     .option('-s --scale [number/percent]', 'scale all images')
     .option('-t --trim [trim color]', "trim all images, default trim color is transparent")
+    // .option("-a --alpha [string]", "packed file's name")
     .option('-p --pack [int number/"all"]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
     .option("-n --name [string]", "packed file's name")
     .option('--width [int number]', "pack file's min width")
@@ -697,6 +698,11 @@ function packImages(packInfo, cb) {
         '-compose copy',
         '-border 1x1',
         '-trim',
+        '-bordercolor',
+        '"'+Config.trimBy+'"',
+        '-compose copy',
+        '-border',
+        Config.borderWidth+'x'+Config.borderWidth,
         '"' + packedFile + '"'
     ]);
 
@@ -910,7 +916,7 @@ function resizeImage(img, scaleX, scaleY, outImg, cb) {
     var flipY = Config.flipY;
     var flip = (flipX ? '-flop ' : '') + (flipY ? '-flip ' : '');
     var cmd;
-    // cmd='convert "' + img + '"" -resize ' + scaleX + 'x' + scaleY + '! "' + outImg + '"';
+    // cmd='convert "' + img + '" -resize ' + scaleX + 'x' + scaleY + '! "' + outImg + '"';
     cmd = 'convert ' + flip + ' -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! "' + img + '" "' + outImg + '"';
     // cmd='convert "' + img + '" -adaptive-resize ' + scaleX + 'x' + scaleY + '! "' + outImg + '"';
     // cmd = 'convert -define filter:blur=0.5 -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! "' + img + '" "' + outImg + '"';
