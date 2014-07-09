@@ -383,7 +383,7 @@ function parseOrignalFileName(orignalFile, packBy) {
         info.parts = [baseName];
     } else if (packBy === 0) {
         info.packBy = (info.firstDir || Config.packName) //+ Config.imgFileExtName;
-        // info.parts = [baseName];
+            // info.parts = [baseName];
         info.parts = [info.packBy, baseName];
     } else {
         var p = [];
@@ -692,17 +692,24 @@ function packImages(packInfo, cb) {
         // cmd = cmd.concat(fillText(imgInfo.index, imgInfo.x + 4, imgInfo.y + 16, 16, 'SourceSansProL'));
     });
 
+    var ext = null;
+    if (Config.trimBy == Config.packBgColor) {
+        ext = [
+            '-bordercolor',
+            '"' + Config.packBgColor + '"',
+            '-compose copy',
+            '-border',
+            Config.borderWidth + 'x' + Config.borderWidth
+        ];
+    }
+
     cmd = cmd.concat([
         '-bordercolor',
-        '"'+Config.packBgColor+'"',
+        '"' + Config.packBgColor + '"',
         '-compose copy',
         '-border 1x1',
         '-trim',
-        '-bordercolor',
-        '"'+Config.trimBy+'"',
-        '-compose copy',
-        '-border',
-        Config.borderWidth+'x'+Config.borderWidth,
+        ext ? ext.join(' ') : '',
         '"' + packedFile + '"'
     ]);
 
