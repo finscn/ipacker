@@ -7,55 +7,11 @@ var wrench = require('wrench');
 var glob = require('glob');
 var program = require('commander');
 
-var GrowingPacker = require('./lib/packer.growing').GrowingPacker;
-
-program
-    .version('0.5')
-    .option('-i --input [string]', 'input dir name')
-    .option('-o --output [string]', 'output dir name')
-    .option('-s --scale [number/percent]', 'scale all images')
-    .option('-t --trim [trim color]', "trim all images, default trim color is transparent")
-    // .option("-a --alpha [string]", "packed file's name")
-    .option('-p --pack [int number/"all"]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
-    .option("-n --name [string]", "packed file's name")
-    .option('--width [int number]', "pack file's min width")
-    .option('--height [int number]', "pack file's min height")
-    .option('--ox [number/percent]', "the orignal X in source images. number means n pixel.\n\t percent(e.g. 35%) means the position of width")
-    .option('--oy [number/percent]', "the orignal Y in source images. number means n pixel.\n\t percent(e.g. 35%) means the position of height")
-    .option('-m --margin [int number]', "the margin of one image")
-    .option('--flipX', "flipX images")
-    .option('--flipY', "flipY images")
-    .option('--split [string]', 'file-part split char')
-    .option('--configOnly', "create config file only")
-    .parse(process.argv);
-
-if (process.argv.length < 3) {
-    program.help();
-    process.exit();
-}
 
 var cwd = process.env.PWD || process.cwd();
 
-function getFiles(dir) {
-    var files = glob.sync(Path.normalize(dir + "/**/*" + Config.imgFileExtName), {});
-    files = files.concat(glob.sync(Path.normalize(dir + "/**/*" + Config.cfgFileExtName), {}));
-    files.sort();
-    return files
-}
 
-var inputDir = program.input || "./input/";
-var outputDir = program.output || "./output/";
-
-inputDir = Path.normalize(inputDir + "/");
-outputDir = Path.normalize(outputDir + "/");
-
-var orignalInputDir = inputDir;
-var orignalOutputDir = outputDir;
-
-var scaleOutputDir = Path.normalize(outputDir + "/scale/");
-var trimOutputDir = Path.normalize(outputDir + "/trim/");
-var packOutputDir = Path.normalize(outputDir + "/pack/");
-var imgMappingDir = Path.normalize(packOutputDir + "/img-mapping/");
+var GrowingPacker = require('./lib/packer.growing').GrowingPacker;
 
 var inputFiles;
 var allImagesInfo;
@@ -64,52 +20,115 @@ var trimImagesInfo;
 var packMaxWidth = 2048;
 var packMaxHeight = 2048;
 
-var Config;
+var Config = {
+    scale: "100%",
+    borderWidth: 0,
+    sourceOrignalX: 0,
+    sourceOrignalY: 0,
+    flipX: false,
+    flipY: false,
+    split: "-",
+    packName: "all_pack",
+    packBgColor: "transparent",
+    imgFileExtName: ".png",
+    cfgFileExtName: ".txt",
+    optipng: false,
+    resDir: "res/image/",
+    dirPart: 2,
+};
 
-(function() {
-    var scale = program.scale || "100%";
-    var trimBy = program.trim;
-    var packBy = program.pack;
-    var name = program.name || "all_pack";
-    var packageWidth = parseInt(program.width, 10) || 64; // 64 128 256 512 1024 2048
-    var packageHeight = parseInt(program.height, 10) || 64;
-    var configOnly = program.configOnly || false;
-    var borderWidth = parseInt(program.margin || 2, 10);
+if (!module.parent) {
 
-    trimBy = trimBy === true ? "transparent" : (trimBy || false);
+    program
+        .version('0.5')
+        .option('-i --input [string]', 'input dir name')
+        .option('-o --output [string]', 'output dir name')
+        .option('-s --scale [number/percent]', 'scale all images')
+        .option('-t --trim [trim color]', "trim all images, default trim color is transparent")
+        // .option("-a --alpha [string]", "packed file's name")
+        .option('-p --pack [int number/"all"]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
+        .option("-n --name [string]", "packed file's name")
+        .option('--width [int number]', "pack file's min width")
+        .option('--height [int number]', "pack file's min height")
+        .option('--origX [number/percent]', "the orignal X in source images. number means n pixel.\n\t percent(e.g. 35%) means the position of width")
+        .option('--origY [number/percent]', "the orignal Y in source images. number means n pixel.\n\t percent(e.g. 35%) means the position of height")
+        .option('-m --margin [int number]', "the margin of one image")
+        .option('--flipX', "flipX images")
+        .option('--flipY', "flipY images")
+        .option('--split [string]', 'file-part split char')
+        .option('--shadow [string]', 'shadow-file')
+        .option('--configOnly', "create config file only")
+        .parse(process.argv);
 
-    packBy = packBy === true ? "all" : packBy;
-    if (packBy && packBy != "all") {
-        packBy = parseInt(packBy || 0, 10) || 0;
+    if (process.argv.length < 3) {
+        program.help();
+        process.exit();
     }
 
-    Config = {
-        scale: scale,
-        trimBy: trimBy,
-        packBy: packBy,
-        packName: name,
-        borderWidth: borderWidth,
-        packageWidth: packageWidth,
-        packageHeight: packageHeight,
-        doPack: !configOnly,
-        doScale: !configOnly,
-        doTrim: !configOnly,
-        split: program.split || "-",
-        optipng: false,
-        sourceOrignalX: program.ox || 0, //"50%",
-        sourceOrignalY: program.oy || 0, //"50%",
-        flipY: program.flipY || false, //"50%",
-        flipX: program.flipX || false, //"50%",
-        packBgColor: "transparent",
-        imgFileExtName: ".png",
-        cfgFileExtName: ".txt",
-        resDir: "res/image/",
-        dirPart: 2,
-    };
-}());
+    var inputDir = program.input || "./input/";
+    var outputDir = program.output || "./output/";
+
+    inputDir = Path.normalize(inputDir + "/");
+    outputDir = Path.normalize(outputDir + "/");
+
+    var orignalInputDir = inputDir;
+    var orignalOutputDir = outputDir;
+
+    var scaleOutputDir = Path.normalize(outputDir + "/scale/");
+    var trimOutputDir = Path.normalize(outputDir + "/trim/");
+    var packOutputDir = Path.normalize(outputDir + "/pack/");
+    var imgMappingDir = Path.normalize(packOutputDir + "/img-mapping/");
 
 
+    (function() {
+        var scale = program.scale;
+        var trimBy = program.trim;
+        var packBy = program.pack;
+        var shadow = program.shadow;
+        var name = program.name;
+        var packageWidth = parseInt(program.width, 10) || 64; // 64 128 256 512 1024 2048
+        var packageHeight = parseInt(program.height, 10) || 64;
+        var configOnly = program.configOnly || false;
+        var borderWidth = parseInt(program.margin || 0, 10);
 
+        trimBy = trimBy === true ? "transparent" : (trimBy || false);
+
+        packBy = packBy === true ? "all" : packBy;
+        if (packBy && packBy != "all") {
+            packBy = parseInt(packBy || 0, 10) || 0;
+        }
+
+        shadow = shadow === true ? "shadow.png" : shadow;
+        if (shadow) {
+            shadow = Path.normalize(shadow);
+        }
+
+        var _config = {
+            scale: scale || Config.scale,
+            trimBy: trimBy,
+            packBy: packBy,
+            packName: name || Config.packName,
+            borderWidth: borderWidth || Config.borderWidth,
+            packageWidth: packageWidth,
+            packageHeight: packageHeight,
+            doPack: !configOnly,
+            doScale: !configOnly,
+            doTrim: !configOnly,
+            split: program.split || Config.split,
+            sourceOrignalX: program.origX || Config.sourceOrignalX, //"50%",
+            sourceOrignalY: program.origY || Config.sourceOrignalY, //"50%",
+            flipY: program.flipY || Config.flipX, //"50%",
+            flipX: program.flipX || Config.flipY, //"50%",
+        };
+
+        for (var key in _config) {
+            Config[key] = _config[key];
+        }
+
+    }());
+
+    main();
+}
 
 function main() {
 
@@ -135,9 +154,6 @@ function main() {
         start(inputFiles);
     }
 }
-
-main();
-
 
 function start(files) {
 
@@ -194,6 +210,9 @@ function createMapping(infoList) {
                 h: info.imageInfo.h,
                 ox: info.imageInfo.ox,
                 oy: info.imageInfo.oy,
+
+                // sx: info.imageInfo.sx,
+                // sy: info.imageInfo.sy,
                 sw: info.imageInfo.sw,
                 sh: info.imageInfo.sh,
             }
@@ -445,7 +464,10 @@ function startPack(fileInfoList, cb) {
                 return;
             }
             var packInfo = packsInfo[idx];
-            packImages(packInfo, function() {
+            var imgInfoList = packInfo.imgInfoList;
+            var size = packInfo.size;
+            var packedFile = packInfo.packedFile;
+            packImages(imgInfoList, size, packedFile, function() {
                 $next();
             });
         }
@@ -514,7 +536,13 @@ function startScale(cb) {
     });
 }
 
+function startAddShadow(cb) {
 
+    addShadows(inputFiles, Config.shadow, function() {
+        console.log("==== all shadows added ====");
+        cb && cb();
+    });
+}
 
 
 
@@ -655,27 +683,8 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
 }
 
 
-function computeImageSize(imageInfo, fileName) {
-    var sy = imageInfo.sy
-    imageInfo.sx -= Config.borderWidth;
-    imageInfo.sy -= Config.borderWidth;
-    imageInfo.w += Config.borderWidth * 2;
-    imageInfo.h += Config.borderWidth * 2;
-    var f = parsePercent(Config.sourceOrignalX);
-    var ox = f === false ? parseFloat(Config.sourceOrignalX) || 0 : imageInfo.sw * f;
-    var f = parsePercent(Config.sourceOrignalY);
-    var oy = f === false ? parseFloat(Config.sourceOrignalY) || 0 : imageInfo.sh * f;
-    // imageInfo.ox = ox - imageInfo.sx;
-    // imageInfo.oy = oy - imageInfo.sy;
-    imageInfo.ox = imageInfo.sx - ox;
-    imageInfo.oy = imageInfo.sy - oy;
-}
+function packImages(imgInfoList, size, outputFile, cb) {
 
-
-function packImages(packInfo, cb) {
-    var imgInfoList = packInfo.imgInfoList;
-    var packedFile = packInfo.packedFile;
-    var size = packInfo.size;
     var width = size[0],
         height = size[1];
 
@@ -708,24 +717,47 @@ function packImages(packInfo, cb) {
         '"' + Config.packBgColor + '"',
         '-compose copy',
         '-border 1x1',
-        '-trim',
+        Config.trimBy ? '-trim' : '',
         ext ? ext.join(' ') : '',
-        '"' + packedFile + '"'
+        '"' + outputFile + '"'
     ]);
 
     callCmd(cmd.join(' '), function(err) {
-        console.log("==== packed: " + packedFile + " ====");
-        if (Config.optipng) {
-            console.log("start optipng " + packedFile + " ...");
-            var cmd = 'optipng -o4 "' + packedFile + '"';
-            callCmd(cmd, function(stdout) {
+        readImageSize(outputFile, function(w, h) {
+            var stats = fs.statSync(outputFile);
+            var fileSizeInBytes = stats["size"];
+            var kb = (fileSizeInBytes / 1000).toFixed(2)
+            console.log("==== packed: " + outputFile + " ---- " + w + " * " + h + " , " + kb + "kb" + " ====");
+            if (Config.optipng) {
+                console.log("start optipng " + outputFile + " ...");
+                var cmd = 'optipng -o4 "' + outputFile + '"';
+                callCmd(cmd, function(stdout) {
+                    cb && cb();
+                });
+            } else {
                 cb && cb();
-            });
-        } else {
-            cb && cb();
-        }
+            }
+        });
     });
 }
+
+
+
+function computeImageSize(imageInfo, fileName) {
+    imageInfo.sx -= Config.borderWidth;
+    imageInfo.sy -= Config.borderWidth;
+    imageInfo.w += Config.borderWidth * 2;
+    imageInfo.h += Config.borderWidth * 2;
+    var f = parsePercent(Config.sourceOrignalX);
+    var origX = f === false ? parseFloat(Config.sourceOrignalX) || 0 : imageInfo.sw * f;
+    var f = parsePercent(Config.sourceOrignalY);
+    var origY = f === false ? parseFloat(Config.sourceOrignalY) || 0 : imageInfo.sh * f;
+    // imageInfo.ox = origX - imageInfo.sx;
+    // imageInfo.oy = origY - imageInfo.sy;
+    imageInfo.ox = imageInfo.sx - origX;
+    imageInfo.oy = imageInfo.sy - origY;
+}
+
 
 
 function drawImage(img, x, y) {
@@ -934,6 +966,85 @@ function resizeImage(img, scaleX, scaleY, outImg, cb) {
 }
 
 
+function addShadows(imageFiles, shadow, cb) {
+
+    var idx = 0;
+    var $next = function() {
+        if (idx >= imageFiles.length) {
+            cb && cb();
+            return;
+        }
+        var img = imageFiles[idx];
+        var fileName = Path.basename(img);
+
+        var outShadowImg = Path.relative(inputDir, img);
+        outShadowImg = Path.normalize(shadowOutputDir + "/" + outShadowImg);
+        var dir = Path.dirname(outShadowImg);
+        if (!fs.existsSync(dir)) {
+            wrench.mkdirSyncRecursive(dir);
+        }
+
+        if (Path.extname(fileName) == Config.cfgFileExtName) {
+            copyFileSync(img, outShadowImg);
+            $next();
+        } else {
+            addShadow(img, outShadowImg, shadow, function() {
+                console.log("==== shadow added: " + (outShadowImg) + " ====");
+                $next();
+            });
+        }
+        idx++;
+    }
+    $next();
+
+}
+
+
+
+function addShadow(inFile, outFile, shadowInfo, cb) {
+
+
+    // TODO : read the size of shadow-image file.
+
+    inFile = Path.normalize(inFile);
+    outFile = Path.normalize(outFile);
+
+    var cx = shadowInfo.width / 2;
+    var cy = shadowInfo.height / 2;
+    var shadowX = Config.sourceOrignalX - cx;
+    var shadowY = Config.sourceOrignalY - cy;
+
+    var width = inFile.width;
+    var height = Math.max(inFile.height, Config.sourceOrignalY + shadowInfo.height);
+
+    var cmd = ['convert',
+        '-size',
+        width + 'x' + height,
+        'xc:"' + Config.packBgColor + '"'
+    ];
+
+    cmd = cmd.concat(drawImage(shadowInfo.imgFile, shadowX, shadowY));
+    cmd = cmd.concat(drawImage(inFile, 0, 0));
+
+    cmd = cmd.concat([
+        '-bordercolor',
+        '"' + Config.packBgColor + '"',
+        '-compose copy',
+        '"' + outputFile + '"'
+    ]);
+
+    callCmd(cmd.join(' '), function(err) {
+        if (err) {
+            console.log("addShadow err : ", inFile, outFile, err);
+            return;
+        }
+        cb && cb()
+    });
+    // withShadow = withShadow.draw("image", "Over", x + "," + y, shadowWidth + "," + shadowHeight, shadowImg);
+    // withShadow = withShadow.draw("image", "Over", 0 + "," + 0, 0 + "," + 0, inFile)
+
+}
+
 
 ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
@@ -1039,6 +1150,14 @@ function callCmd(cmd, cb) {
     });
 }
 
+function getFiles(dir) {
+    var files = glob.sync(Path.normalize(dir + "/**/*.png"), {});
+    files = files.concat(glob.sync(Path.normalize(dir + "/**/*.jpg"), {}));
+    files = files.concat(glob.sync(Path.normalize(dir + "/**/*" + Config.cfgFileExtName), {}));
+    files.sort();
+    return files
+}
+
 ///////////////////////////////////
 ///////////////////////////////////
 ///////////////////////////////////
@@ -1048,3 +1167,13 @@ function callCmd(cmd, cb) {
 ///////////////////////////////////
 ///////////////////////////////////
 ///////////////////////////////////
+
+exports.Config = Config;
+exports.packImages = packImages;
+exports.preparePackImages = preparePackImages;
+
+
+// convert *.png -resize 50% -set filename:orig "%f" 'converted/%[filename:orig].png'
+// convert *.tga -set filename:orig "%t" '%[filename:orig].png'
+// convert *.webp -set filename:orig "%t" '%[filename:orig].png'
+// convert unnamed.webp unnamed.png
