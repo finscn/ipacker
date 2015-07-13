@@ -78,6 +78,7 @@ if (!module.parent) {
     var trimOutputDir = Path.normalize(outputDir + "/trim/");
     var packOutputDir = Path.normalize(outputDir + "/pack/");
     var imgMappingDir = Path.normalize(packOutputDir + "/img-mapping/");
+    var imgTrimMappingDir = Path.normalize(trimOutputDir + "/img-mapping/");
 
 
     (function() {
@@ -181,6 +182,7 @@ function start(files) {
         } else if (Config.trimBy) {
             startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
                 console.log("\n");
+                createMapping(fileInfoList, true);
             });
         }
     });
@@ -188,7 +190,7 @@ function start(files) {
 
 
 
-function createMapping(infoList) {
+function createMapping(infoList, trimOnly) {
 
     if (infoList.length < 1) {
         console.log("==== Nothing to do ====");
@@ -203,7 +205,7 @@ function createMapping(infoList) {
     infoList.forEach(function(info) {
         if (info.imageInfo) {
             var f = {
-                img: info.packBy,
+                img: trimOnly ? info.baseName : info.packBy,
                 x: info.imageInfo.x,
                 y: info.imageInfo.y,
                 w: info.imageInfo.w,
@@ -211,12 +213,11 @@ function createMapping(infoList) {
                 ox: info.imageInfo.ox,
                 oy: info.imageInfo.oy,
 
-                // sx: info.imageInfo.sx,
-                // sy: info.imageInfo.sy,
+                sx: info.imageInfo.sx,
+                sy: info.imageInfo.sy,
                 sw: info.imageInfo.sw,
                 sh: info.imageInfo.sh,
             }
-
             mapping[info.baseName] = f;
         }
     });
@@ -225,7 +226,13 @@ function createMapping(infoList) {
     }, 2) + ";";
     var code = code1 + "\n\n" + outputStr + "\n\n" + code2;
 
-    var js = Path.normalize(imgMappingDir + Config.packName + ".js");
+    var js;
+
+    if (trimOnly) {
+        js = Path.normalize(imgTrimMappingDir + Config.packName + ".js");
+    } else {
+        js = Path.normalize(imgMappingDir + Config.packName + ".js");
+    }
     fs.writeFileSync(js, code);
 
     console.log("==== Mapping-file created : " + js + " ====");
@@ -481,11 +488,12 @@ function startPack(fileInfoList, cb) {
 
 function startTrim(fileInfoList, cb) {
 
+    cleanDir(imgTrimMappingDir);
+
     var trimFilesInfo = {
         list: [],
         map: {},
     };
-
 
     var count = fileInfoList.length;
     var idx = -1;
@@ -830,12 +838,14 @@ function computeTrimInfo(img, cb) {
             var offset = rs[3].split("+").slice(1, 3);
             var sourceSize = rs[3].split("+")[0].split("x");
             var imageInfo = {
-                sx: Number(offset[0]) - 1,
-                sy: Number(offset[1]) - 1,
-                sw: Number(sourceSize[0]) - 2,
-                sh: Number(sourceSize[1]) - 2,
+                x: 0,
+                y: 0,
                 w: Number(size[0]),
                 h: Number(size[1]),
+                sx: Number(offset[0]),
+                sy: Number(offset[1]),
+                sw: Number(sourceSize[0]),
+                sh: Number(sourceSize[1]),
                 imgFile: getTrimedImageName(img),
             };
             if (cb) {
