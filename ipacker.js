@@ -23,12 +23,13 @@ var packMaxHeight = 2048;
 var Config = {
     scale: "100%",
     borderWidth: 0,
-    sourceOrignalX: 0,
-    sourceOrignalY: 0,
+    anchorX: 0,
+    anchorY: 0,
     flipX: false,
     flipY: false,
     split: "-",
     packName: "all_pack",
+    trimName: "all_trim",
     packBgColor: "transparent",
     imgFileExtName: ".png",
     cfgFileExtName: ".txt",
@@ -36,7 +37,7 @@ var Config = {
     resDir: "res/image/",
     dirPart: 2,
 };
-
+var borderArgument;
 if (!module.parent) {
 
     program
@@ -50,11 +51,13 @@ if (!module.parent) {
         .option("-n --name [string]", "packed file's name")
         .option('--width [int number]', "pack file's min width")
         .option('--height [int number]', "pack file's min height")
-        .option('--origX [number/percent]', "the orignal X in source images. number means n pixel.\n\t percent(e.g. 35%) means the position of width")
-        .option('--origY [number/percent]', "the orignal Y in source images. number means n pixel.\n\t percent(e.g. 35%) means the position of height")
         .option('-m --margin [int number]', "the margin of one image")
         .option('--flipX', "flipX images")
         .option('--flipY', "flipY images")
+        .option('--anchor [boolean]', "keep anchor information", false)
+        .option('--anchorX [number/percent]', "the anchor X in source images. number means n pixel.\n\t percent(e.g. 35%) means the position of width")
+        .option('--anchorY [number/percent]', "the anchor Y in source images. number means n pixel.\n\t percent(e.g. 35%) means the position of height")
+        .option('--keep [boolean]', 'keep source size information', true)
         .option('--split [string]', 'file-part split char')
         .option('--shadow [string]', 'shadow-file')
         .option('--configOnly', "create config file only")
@@ -87,6 +90,10 @@ if (!module.parent) {
         var packBy = program.pack;
         var shadow = program.shadow;
         var name = program.name;
+
+        var anchor = program.anchor;
+        var keep = program.keep;
+
         var packageWidth = parseInt(program.width, 10) || 64; // 64 128 256 512 1024 2048
         var packageHeight = parseInt(program.height, 10) || 64;
         var configOnly = program.configOnly || false;
@@ -109,6 +116,7 @@ if (!module.parent) {
             trimBy: trimBy,
             packBy: packBy,
             packName: name || Config.packName,
+            trimName: name || Config.trimName,
             borderWidth: borderWidth || Config.borderWidth,
             packageWidth: packageWidth,
             packageHeight: packageHeight,
@@ -116,10 +124,12 @@ if (!module.parent) {
             doScale: !configOnly,
             doTrim: !configOnly,
             split: program.split || Config.split,
-            sourceOrignalX: program.origX || Config.sourceOrignalX, //"50%",
-            sourceOrignalY: program.origY || Config.sourceOrignalY, //"50%",
+            anchor: anchor,
+            anchorX: program.anchorX || Config.anchorX, //"50%",
+            anchorY: program.anchorY || Config.anchorY, //"50%",
             flipY: program.flipY || Config.flipX, //"50%",
             flipX: program.flipX || Config.flipY, //"50%",
+            keep: keep,
         };
 
         for (var key in _config) {
@@ -127,6 +137,9 @@ if (!module.parent) {
         }
 
     }());
+
+
+    borderArgument = '-border ' + Config.borderWidth + 'x' + Config.borderWidth;
 
     main();
 }
@@ -202,21 +215,23 @@ function createMapping(infoList, trimOnly) {
     var code2 = "for (var key in _imgs){ ImageMapping[key]=_imgs[key]; }\n\n})();";
 
     var mapping = {};
+    var k = Config.keep;
     infoList.forEach(function(info) {
         if (info.imageInfo) {
+            var imgInfo = info.imageInfo;
             var f = {
                 img: trimOnly ? info.baseName : info.packBy,
-                x: info.imageInfo.x,
-                y: info.imageInfo.y,
-                w: info.imageInfo.w,
-                h: info.imageInfo.h,
-                ox: info.imageInfo.ox,
-                oy: info.imageInfo.oy,
-
-                sx: info.imageInfo.sx,
-                sy: info.imageInfo.sy,
-                sw: info.imageInfo.sw,
-                sh: info.imageInfo.sh,
+                x: imgInfo.x + Config.borderWidth,
+                y: imgInfo.y + Config.borderWidth,
+                w: imgInfo.w - Config.borderWidth * 2,
+                h: imgInfo.h - Config.borderWidth * 2,
+                ox: k ? imgInfo.ox : 0,
+                oy: k ? imgInfo.oy : 0,
+                sw: k ? imgInfo.sw : imgInfo.w,
+                sh: k ? imgInfo.sh : imgInfo.h,
+            };
+            if (Config.anchor) {
+                f.anchor = imgInfo.anchor;
             }
             mapping[info.baseName] = f;
         }
@@ -229,7 +244,7 @@ function createMapping(infoList, trimOnly) {
     var js;
 
     if (trimOnly) {
-        js = Path.normalize(imgTrimMappingDir + Config.packName + ".js");
+        js = Path.normalize(imgTrimMappingDir + Config.trimName + ".js");
     } else {
         js = Path.normalize(imgMappingDir + Config.packName + ".js");
     }
@@ -358,12 +373,12 @@ function startParse(fileList, cb) {
         };
         var imageInfo = info.imageInfo;
         readImageSize(info.orignalFile, function(w, h) {
-            imageInfo.sx = 0;
-            imageInfo.sy = 0;
-            imageInfo.sw = w;
-            imageInfo.sh = h;
             imageInfo.w = w;
             imageInfo.h = h
+            imageInfo.ox = 0;
+            imageInfo.oy = 0;
+            imageInfo.sw = w;
+            imageInfo.sh = h;
 
             computeImageSize(imageInfo, info.orignalFile);
 
@@ -715,8 +730,7 @@ function packImages(imgInfoList, size, outputFile, cb) {
             '-bordercolor',
             '"' + Config.packBgColor + '"',
             '-compose copy',
-            '-border',
-            Config.borderWidth + 'x' + Config.borderWidth
+            borderArgument
         ];
     }
 
@@ -724,9 +738,8 @@ function packImages(imgInfoList, size, outputFile, cb) {
         '-bordercolor',
         '"' + Config.packBgColor + '"',
         '-compose copy',
-        '-border 1x1',
         Config.trimBy ? '-trim' : '',
-        ext ? ext.join(' ') : '',
+        ext ? ext.join(' ') : borderArgument,
         '"' + outputFile + '"'
     ]);
 
@@ -752,18 +765,18 @@ function packImages(imgInfoList, size, outputFile, cb) {
 
 
 function computeImageSize(imageInfo, fileName) {
-    imageInfo.sx -= Config.borderWidth;
-    imageInfo.sy -= Config.borderWidth;
+    imageInfo.ox -= Config.borderWidth;
+    imageInfo.oy -= Config.borderWidth;
+    imageInfo.sw -= Config.borderWidth * 2;
+    imageInfo.sh -= Config.borderWidth * 2;
+
     imageInfo.w += Config.borderWidth * 2;
     imageInfo.h += Config.borderWidth * 2;
-    var f = parsePercent(Config.sourceOrignalX);
-    var origX = f === false ? parseFloat(Config.sourceOrignalX) || 0 : imageInfo.sw * f;
-    var f = parsePercent(Config.sourceOrignalY);
-    var origY = f === false ? parseFloat(Config.sourceOrignalY) || 0 : imageInfo.sh * f;
-    // imageInfo.ox = origX - imageInfo.sx;
-    // imageInfo.oy = origY - imageInfo.sy;
-    imageInfo.ox = imageInfo.sx - origX;
-    imageInfo.oy = imageInfo.sy - origY;
+    var f = parsePercent(Config.anchorX);
+    var anchorX = f === false ? parseFloat(Config.anchorX) || 0 : imageInfo.sw * f;
+    var f = parsePercent(Config.anchorY);
+    var anchorY = f === false ? parseFloat(Config.anchorY) || 0 : imageInfo.sh * f;
+    imageInfo.anchor = [anchorX - imageInfo.ox, anchorY - imageInfo.oy];
 }
 
 
@@ -830,7 +843,7 @@ function fillText(text, x, y, size, font) {
 
 
 function computeTrimInfo(img, cb) {
-    var cmd = 'convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy -border 1x1 -trim info:-';
+    var cmd = 'convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' -trim info:-';
     callCmd(cmd, function(stdout) {
         if (stdout) {
             var rs = stdout.trim().split(" ");
@@ -842,12 +855,14 @@ function computeTrimInfo(img, cb) {
                 y: 0,
                 w: Number(size[0]),
                 h: Number(size[1]),
-                sx: Number(offset[0]),
-                sy: Number(offset[1]),
+
+                ox: Number(offset[0]),
+                oy: Number(offset[1]),
                 sw: Number(sourceSize[0]),
                 sh: Number(sourceSize[1]),
                 imgFile: getTrimedImageName(img),
             };
+            // console.log(stdout,imageInfo.imgFile, offset, sourceSize)
             if (cb) {
                 cb(imageInfo)
             }
@@ -890,7 +905,7 @@ function trimImages(imageFiles, cb) {
 // 'convert output/scale/PlatformA-1.png -trim output/trim/PlatformA-1.png'
 
 function trimImg(img, outImg, cb) {
-    var cmd = 'convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy -border 1x1 -trim -bordercolor "' + Config.trimBy + '" -compose copy -border ' + Config.borderWidth + 'x' + Config.borderWidth + ' "' + outImg + '"';
+    var cmd = 'convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' -trim -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' "' + outImg + '"';
     // var cmd = 'convert "' + img + '" -trim "' + outImg + '"';
     callCmd(cmd, function() {
         console.log("==== trimed : " + outImg + " ====");
@@ -1021,11 +1036,11 @@ function addShadow(inFile, outFile, shadowInfo, cb) {
 
     var cx = shadowInfo.width / 2;
     var cy = shadowInfo.height / 2;
-    var shadowX = Config.sourceOrignalX - cx;
-    var shadowY = Config.sourceOrignalY - cy;
+    var shadowX = Config.anchorX - cx;
+    var shadowY = Config.anchorY - cy;
 
     var width = inFile.width;
-    var height = Math.max(inFile.height, Config.sourceOrignalY + shadowInfo.height);
+    var height = Math.max(inFile.height, Config.anchorY + shadowInfo.height);
 
     var cmd = ['convert',
         '-size',
