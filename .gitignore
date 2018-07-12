@@ -1,5 +1,8 @@
 .DS_Store
+package-lock.json
 /node_modules
 /input
 /output
+/example/split
+/example/pack
 /_*/
