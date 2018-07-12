@@ -3,7 +3,7 @@
 var fs = require('fs');
 var cp = require('child_process');
 var Path = require('path');
-var wrench = require('wrench');
+var fsExt = require('fs-extra')
 var glob = require('glob');
 var program = require('commander');
 
@@ -186,11 +186,13 @@ function start(files) {
                 console.log("\n");
                 startPack(fileInfoList, function(fileInfoList, packGroupInfo) {
                     createMapping(fileInfoList);
+                    fsExt.removeSync(imgTrimMappingDir);
                 });
             });
         } else if (Config.packBy) {
             startPack(filesInfo.list, function(fileInfoList, packGroupInfo) {
                 createMapping(fileInfoList);
+                fsExt.removeSync(imgTrimMappingDir);
             });
         } else if (Config.trimBy) {
             startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
@@ -889,7 +891,7 @@ function trimImages(imageFiles, cb) {
         var trimedFile = getTrimedImageName(img);
         var dir = Path.dirname(trimedFile);
         if (!fs.existsSync(dir)) {
-            wrench.mkdirSyncRecursive(dir);
+            fsExt.ensureDirSync(dir);
         }
 
         trimImg(img, trimedFile, function() {
@@ -958,7 +960,7 @@ function scaleImages(imageFiles, scale, cb) {
         outScaleImg = Path.normalize(scaleOutputDir + "/" + outScaleImg);
         var dir = Path.dirname(outScaleImg);
         if (!fs.existsSync(dir)) {
-            wrench.mkdirSyncRecursive(dir);
+            fsExt.ensureDirSync(dir);
         }
 
         if (Path.extname(fileName) == Config.cfgFileExtName) {
@@ -1006,7 +1008,7 @@ function addShadows(imageFiles, shadow, cb) {
         outShadowImg = Path.normalize(shadowOutputDir + "/" + outShadowImg);
         var dir = Path.dirname(outShadowImg);
         if (!fs.existsSync(dir)) {
-            wrench.mkdirSyncRecursive(dir);
+            fsExt.ensureDirSync(dir);
         }
 
         if (Path.extname(fileName) == Config.cfgFileExtName) {
@@ -1156,9 +1158,9 @@ function overide(receiver, supplier) {
 
 function cleanDir(dir) {
     if (fs.existsSync(dir)) {
-        wrench.rmdirSyncRecursive(dir);
+        fsExt.removeSync(dir);
     }
-    wrench.mkdirSyncRecursive(dir);
+    fsExt.ensureDirSync(dir);
 }
 
 function callCmd(cmd, cb) {

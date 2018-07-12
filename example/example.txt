@@ -1,2 +1,3 @@
-node ../ipacker.js  -p --name all-in-one
+node ../ipacker.js --input ./pack/input --output ./pack/output --trim --margin 2 --pack --name all-pack
+
 node ../ipacker.js  -p 1 --name all-in-one
