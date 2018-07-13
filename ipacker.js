@@ -438,7 +438,6 @@ function parseOrignalFileName(orignalFile, packBy) {
     var patternName;
     var pattern = Config.pattern;
     if (pattern) {
-
         pattern = parsePattern(pattern, 'fullDir', fullDir);
         pattern = parsePattern(pattern, 'firstDir', firstDir);
         pattern = parsePattern(pattern, 'secondDir', secondDir);
