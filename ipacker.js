@@ -48,6 +48,7 @@ if (!module.parent) {
         .option('-t --trim [trim color]', "trim all images, default trim color is transparent")
         // .option("-a --alpha [string]", "packed file's name")
         .option('-p --pack [int number/"all"]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
+        .option('--pattern [string]', 'packed name, keys: {dir},{firstDir},{lastDir},{name}')
         .option("-n --name [string]", "packed file's name")
         .option('--width [int number]', "pack file's min width")
         .option('--height [int number]', "pack file's min height")
@@ -88,6 +89,7 @@ if (!module.parent) {
         var scale = program.scale;
         var trimBy = program.trim;
         var packBy = program.pack;
+        var pattern = program.pattern;
         var shadow = program.shadow;
         var name = program.name;
 
@@ -102,9 +104,11 @@ if (!module.parent) {
         trimBy = trimBy === true ? "transparent" : (trimBy || false);
 
         packBy = packBy === true ? "all" : packBy;
-        if (packBy && packBy != "all") {
+        if (packBy && packBy !== "all") {
             packBy = parseInt(packBy || 0, 10) || 0;
         }
+
+        pattern = pattern || "";
 
         shadow = shadow === true ? "shadow.png" : shadow;
         if (shadow) {
@@ -115,6 +119,7 @@ if (!module.parent) {
             scale: scale || Config.scale,
             trimBy: trimBy,
             packBy: packBy,
+            pattern: pattern,
             packName: name || Config.packName,
             trimName: name || Config.trimName,
             borderWidth: borderWidth || Config.borderWidth,
@@ -150,7 +155,7 @@ function main() {
 
     inputFiles = getFiles(inputDir);
 
-    if (Config.scale != "100%") {
+    if (Config.scale !== "100%") {
         if (Config.doScale) {
             cleanDir(scaleOutputDir);
             startScale(function() {
@@ -235,7 +240,7 @@ function createMapping(infoList, trimOnly) {
             if (Config.anchor) {
                 f.anchor = imgInfo.anchor;
             }
-            mapping[info.baseName] = f;
+            mapping[info.patternName] = f;
         }
     });
     var outputStr = "var _imgs=" + JSON.stringify(mapping, function(k, v) {
@@ -264,7 +269,7 @@ function createImagesTree(fileInfoList) {
 
     var tree = {};
     var root = tree;
-    if (Config.packBy == "all") {
+    if (Config.packBy === "all") {
         root = tree[Config.packName] = {};
     }
 
@@ -309,7 +314,7 @@ function createJS(tree) {
 
     var config;
     for (var key in tree) {
-        if (Config.packBy == "all") {
+        if (Config.packBy === "all") {
             config = tree[key];
         } else {
             config = {};
@@ -393,12 +398,32 @@ function startParse(fileList, cb) {
 }
 
 
+function parsePattern(pattern, key, value) {
+    var reg = new RegExp("\{[^\{\}]*" + key + "[^\{\}]*\}", 'g');
+    var match = pattern.match(reg);
+    if (match) {
+        match.forEach(function(sub) {
+            var idx = pattern.indexOf(sub);
+            if (value) {
+                var before = pattern.substring(0, idx);
+                var after = pattern.substring(idx + sub.length);
+                var newSub = sub.replace(key, value);
+                newSub = newSub.substring(1, newSub.length - 1);
+                pattern = before + newSub + after;
+            } else {
+                pattern = pattern.replace(sub, '');
+            }
+        });
+    }
+    return pattern;
+}
 
 function parseOrignalFileName(orignalFile, packBy) {
 
     var dirName = Path.dirname(orignalFile);
     dirName = Path.relative(inputDir, dirName) || "";
     var dirs = dirName.split(Path.seq);
+    var fullDir = dirs.join(Config.split) || "";
     var firstDir = dirs[0] || "";
     var lastDir = dirs[dirs.length - 1] || "";
     var extName = Path.extname(orignalFile);
@@ -406,14 +431,30 @@ function parseOrignalFileName(orignalFile, packBy) {
     var fileParts = baseName.split(Config.split);
     var filePartCount = fileParts.length;
 
+    var patternName;
+    var pattern = Config.pattern;
+    if (pattern) {
+
+        pattern = parsePattern(pattern, 'dir', fullDir);
+        pattern = parsePattern(pattern, 'firstDir', firstDir);
+        pattern = parsePattern(pattern, 'lastDir', lastDir);
+        patternName = parsePattern(pattern, 'name', baseName);
+        if (pattern === patternName) {
+            patternName += baseName;
+        }
+    } else {
+        patternName = baseName;
+    }
+
     var info = {
         parts: [],
         baseName: baseName,
+        patternName: patternName,
         firstDir: firstDir,
         lastDir: lastDir,
     };
     var imgFile = orignalFile;
-    if (extName == Config.cfgFileExtName) {
+    if (extName === Config.cfgFileExtName) {
         var realImg = fs.readFileSync(orignalFile).toString().trim();
         imgFile = Path.normalize(Path.dirname(orignalFile) + "/" + realImg);
     }
@@ -426,7 +467,7 @@ function parseOrignalFileName(orignalFile, packBy) {
         info.parts = [baseName];
     } else if (packBy === 0) {
         info.packBy = (info.firstDir || Config.packName) //+ Config.imgFileExtName;
-            // info.parts = [baseName];
+        // info.parts = [baseName];
         info.parts = [info.packBy, baseName];
     } else {
         var p = [];
@@ -727,7 +768,7 @@ function packImages(imgInfoList, size, outputFile, cb) {
     });
 
     var ext = null;
-    if (Config.trimBy == Config.packBgColor) {
+    if (Config.trimBy === Config.packBgColor) {
         ext = [
             '-bordercolor',
             '"' + Config.packBgColor + '"',
@@ -963,7 +1004,7 @@ function scaleImages(imageFiles, scale, cb) {
             fsExt.ensureDirSync(dir);
         }
 
-        if (Path.extname(fileName) == Config.cfgFileExtName) {
+        if (Path.extname(fileName) === Config.cfgFileExtName) {
             copyFileSync(img, outScaleImg);
             $next();
         } else {
@@ -1011,7 +1052,7 @@ function addShadows(imageFiles, shadow, cb) {
             fsExt.ensureDirSync(dir);
         }
 
-        if (Path.extname(fileName) == Config.cfgFileExtName) {
+        if (Path.extname(fileName) === Config.cfgFileExtName) {
             copyFileSync(img, outShadowImg);
             $next();
         } else {
@@ -1099,9 +1140,9 @@ function parsePercent(percent) {
 }
 
 function parseNumberAttr(attr) {
-    if (attr == "all") {
+    if (attr === "all") {
         return "all"
-    } else if (attr == "none" || attr === null || attr === undefined) {
+    } else if (attr === "none" || attr === null || attr === undefined) {
         return "none"
     }
     return parseInt(attr, 10);
