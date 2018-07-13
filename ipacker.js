@@ -48,7 +48,7 @@ if (!module.parent) {
         .option('-t --trim [trim color]', "trim all images, default trim color is transparent")
         // .option("-a --alpha [string]", "packed file's name")
         .option('-p --pack [int number/"all"]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
-        .option('--pattern [string]', 'packed name, keys: {dir},{firstDir},{lastDir},{name}')
+        .option('--pattern [string]', 'packed name, keys: {fullDir},{firstDir},{secondDir},{lastDir},{name}')
         .option("-n --name [string]", "packed file's name")
         .option('--width [int number]', "pack file's min width")
         .option('--height [int number]', "pack file's min height")
@@ -423,9 +423,13 @@ function parseOrignalFileName(orignalFile, packBy) {
     var dirName = Path.dirname(orignalFile);
     dirName = Path.relative(inputDir, dirName) || "";
     var dirs = dirName.split(Path.seq);
+    var dirCount = dirs.length;
+
     var fullDir = dirs.join(Config.split) || "";
     var firstDir = dirs[0] || "";
+    var secondDir = dirs[1] || "";
     var lastDir = dirs[dirs.length - 1] || "";
+
     var extName = Path.extname(orignalFile);
     var baseName = Path.basename(orignalFile, extName);
     var fileParts = baseName.split(Config.split);
@@ -435,8 +439,9 @@ function parseOrignalFileName(orignalFile, packBy) {
     var pattern = Config.pattern;
     if (pattern) {
 
-        pattern = parsePattern(pattern, 'dir', fullDir);
+        pattern = parsePattern(pattern, 'fullDir', fullDir);
         pattern = parsePattern(pattern, 'firstDir', firstDir);
+        pattern = parsePattern(pattern, 'secondDir', secondDir);
         pattern = parsePattern(pattern, 'lastDir', lastDir);
         patternName = parsePattern(pattern, 'name', baseName);
         if (pattern === patternName) {

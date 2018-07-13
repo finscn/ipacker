@@ -1,3 +1,3 @@
-node ../../ipacker.js --input ./input --output ./output --trim --margin 2 --pack --pattern 'prefix-{dir-}{name}-suffix' --name all-pack
+node ../../ipacker.js --input ./input --output ./output --trim --margin 2 --pack --pattern 'prefix-{fullDir-}{name}-suffix' --name all-pack
 
 node ../ipacker.js  -p 1 --name all-in-one
