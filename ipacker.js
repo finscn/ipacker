@@ -58,6 +58,7 @@ if (!module.parent) {
         .option('-p --pack [int number/"all"]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
         .option('--pattern [string]', 'packed name, keys: {fullDir},{firstDir},{dir[0...]},{lastDir},{name}')
         .option("-n --name [string]", "packed file's name")
+        .option("-r --root [string]", "relative path root")
         .option('--width [int number]', "pack file's min width")
         .option('--height [int number]', "pack file's min height")
         .option('-m --margin [int number]', "the margin of one image")
@@ -100,6 +101,7 @@ if (!module.parent) {
         var pattern = program.pattern;
         var shadow = program.shadow;
         var name = program.name;
+        var root = program.root;
 
         var anchor = program.anchor;
         var keep = program.keep;
@@ -117,6 +119,7 @@ if (!module.parent) {
         }
 
         pattern = pattern || "";
+        root = root || "";
 
         shadow = shadow === true ? "shadow.png" : shadow;
         if (shadow) {
@@ -130,6 +133,7 @@ if (!module.parent) {
             pattern: pattern,
             packName: name || Config.packName,
             trimName: name || Config.trimName,
+            root: root,
             borderWidth: borderWidth || Config.borderWidth,
             packageWidth: packageWidth,
             packageHeight: packageHeight,
@@ -234,7 +238,7 @@ function createMapping(infoList, trimOnly) {
     infoList.forEach(function(info) {
         sourceList.push({
             id: info.patternName,
-            src: info.relativePath,
+            src: (Config.root ? Config.root + "/" : "") + info.relativePath,
         });
         if (info.imageInfo) {
             var imgInfo = info.imageInfo;
