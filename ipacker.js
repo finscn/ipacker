@@ -611,8 +611,6 @@ function startPack(fileInfoList, cb) {
             return;
         }
 
-        console.log(" SortImageRule : " + size[2] + "  ( " + packBy + " )");
-
         packsInfo.push({
             packBy: packBy,
             imgInfoList: imgInfoList,
@@ -856,6 +854,7 @@ function packImages(imgInfoList, size, outputFile, cb) {
 
     var width = size[0],
         height = size[1];
+    var rule = size[2];
 
     var cmd = ['convert',
         '-size',
@@ -895,7 +894,7 @@ function packImages(imgInfoList, size, outputFile, cb) {
             var fileSizeInBytes = stats["size"];
             var kb = (fileSizeInBytes / 1000).toFixed(2)
             console.log('\n');
-            console.log("==== packed: " + outputFile + " ---- " + w + " * " + h + " , " + kb + "kb" + " ====");
+            console.log("==== packed: " + outputFile + " ( " + rule + " ) ---- " + w + " * " + h + " , " + kb + "kb" + " ====");
             console.log('    { id: "' + outputFile + '", src: "' + outputFile + '.png" }');
             if (Config.optipng) {
                 console.log("  start optipng " + outputFile + " ...");
