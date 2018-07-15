@@ -611,7 +611,7 @@ function startPack(fileInfoList, cb) {
             return;
         }
 
-        console.log(packBy + " sort-image-rule : " + size[2]);
+        console.log(" SortImageRule : " + size[2] + "  ( " + packBy + " )");
 
         packsInfo.push({
             packBy: packBy,
