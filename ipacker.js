@@ -610,6 +610,9 @@ function startPack(fileInfoList, cb) {
         if (!size) {
             return;
         }
+
+        console.log(packBy + " sort-image-rule : " + size[2]);
+
         packsInfo.push({
             packBy: packBy,
             imgInfoList: imgInfoList,
@@ -809,7 +812,7 @@ function preparePackImages(imgInfoList, width, height, space) {
     width = packedAllList[0][2];
     height = packedAllList[0][3];
 
-    console.log("SortImageRule : " + packedAllList[0][7]);
+    var rule = packedAllList[0][7];
 
     packed.forEach(function(p, idx) {
         var f = p[0],
@@ -823,7 +826,7 @@ function preparePackImages(imgInfoList, width, height, space) {
         packed[idx] = f;
 
     });
-    return [width, height];
+    return [width, height, rule];
 }
 
 function computePackInfo(imgInfoList, maxWidth, maxHeight) {
