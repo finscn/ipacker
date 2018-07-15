@@ -55,9 +55,10 @@ if (!module.parent) {
         .option('-s --scale [number/percent]', 'scale all images')
         .option('-t --trim [trim color]', "trim all images, default trim color is transparent")
         // .option("-a --alpha [string]", "packed file's name")
-        .option('-p --pack [int number/"all"]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
-        .option('--pattern [string]', 'packed name, keys: {fullDir},{firstDir},{dir[0...]},{lastDir},{name}')
-        .option("-n --name [string]", "packed file's name")
+        .option('-p --pack [string]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
+        .option('--pack-pattern [string]', 'the pattern of packed file name: {fullDir},{firstDir},{dir[0...]},{lastDir},{name}')
+        .option('--pattern [string]', 'the pattern of packed key: {fullDir},{firstDir},{dir[0...]},{lastDir},{name}')
+        .option("-n --name [string]", "packed config file's name")
         .option("-r --root [string]", "relative path root")
         .option('--width [int number]', "pack file's min width")
         .option('--height [int number]', "pack file's min height")
@@ -98,6 +99,7 @@ if (!module.parent) {
         var scale = program.scale;
         var trimBy = program.trim;
         var packBy = program.pack;
+        var packPattern = program.packPattern;
         var pattern = program.pattern;
         var shadow = program.shadow;
         var name = program.name;
@@ -114,10 +116,8 @@ if (!module.parent) {
         trimBy = trimBy === true ? "transparent" : (trimBy || false);
 
         packBy = packBy === true ? "all" : packBy;
-        if (packBy && packBy !== "all") {
-            packBy = parseInt(packBy || 0, 10) || 0;
-        }
 
+        packPattern = packPattern || "";
         pattern = pattern || "";
         root = root || "";
 
@@ -130,6 +130,7 @@ if (!module.parent) {
             scale: scale || Config.scale,
             trimBy: trimBy,
             packBy: packBy,
+            packPattern: packPattern,
             pattern: pattern,
             packName: name || Config.packName,
             trimName: name || Config.trimName,
@@ -461,6 +462,37 @@ function parsePattern(pattern, key, value) {
     return pattern;
 }
 
+function parsePatternWithDirs(pattern, dirs) {
+    var dirCount = dirs.length;
+    var fullDir = dirs.join(Config.split) || "";
+    var firstDir = dirs[0] || "";
+    var lastDir = dirs[dirCount - 1] || "";
+
+    var hasIndex = {};
+    for (var i = 0; i < MAX_DIR_DEPTH; i++) {
+        var k = 'dir[' + i + ']';
+        if (parsePattern(pattern, k)) {
+            hasIndex[i] = true;
+        }
+        pattern = parsePattern(pattern, k, dirs[i] || "");
+    }
+
+    pattern = parsePattern(pattern, 'fullDir', fullDir);
+
+    if (hasIndex[0]) {
+        pattern = parsePattern(pattern, 'firstDir', "");
+    } else {
+        pattern = parsePattern(pattern, 'firstDir', firstDir);
+    }
+
+    if (hasIndex[dirCount - 1]) {
+        pattern = parsePattern(pattern, 'lastDir', "");
+    } else {
+        pattern = parsePattern(pattern, 'lastDir', lastDir);
+    }
+
+    return pattern;
+}
 
 function parseOrignalFileName(orignalFile, packBy) {
     // var dirName = Path.dirname(orignalFile) || "";
@@ -469,10 +501,9 @@ function parseOrignalFileName(orignalFile, packBy) {
     var dirName = Path.dirname(relativePath) || "";
     var dirs = dirName.split(Path.seq);
     var dirCount = dirs.length;
-
     var fullDir = dirs.join(Config.split) || "";
     var firstDir = dirs[0] || "";
-    var lastDir = dirs[dirs.length - 1] || "";
+    var lastDir = dirs[dirCount - 1] || "";
 
     var extName = Path.extname(orignalFile);
     var baseName = Path.basename(orignalFile, extName);
@@ -484,28 +515,7 @@ function parseOrignalFileName(orignalFile, packBy) {
 
     if (pattern) {
 
-        var hasIndex = {};
-        for (var i = 0; i < MAX_DIR_DEPTH; i++) {
-            var k = 'dir[' + i + ']';
-            if (parsePattern(pattern, k)) {
-                hasIndex[i] = true;
-            }
-            pattern = parsePattern(pattern, k, dirs[i] || "");
-        }
-
-        pattern = parsePattern(pattern, 'fullDir', fullDir);
-
-        if (hasIndex[0]) {
-            pattern = parsePattern(pattern, 'firstDir', "");
-        } else {
-            pattern = parsePattern(pattern, 'firstDir', firstDir);
-        }
-
-        if (hasIndex[dirCount - 1]) {
-            pattern = parsePattern(pattern, 'lastDir', "");
-        } else {
-            pattern = parsePattern(pattern, 'lastDir', lastDir);
-        }
+        pattern = parsePatternWithDirs(pattern, dirs);
 
         patternName = parsePattern(pattern, 'name', baseName);
         if (pattern === patternName) {
@@ -515,12 +525,18 @@ function parseOrignalFileName(orignalFile, packBy) {
         patternName = baseName;
     }
 
+    var packPattern = Config.packPattern;
+    if (packPattern) {
+        packPattern = parsePatternWithDirs(packPattern, dirs);
+    }
+
     var info = {
         parts: [],
         orignalFile: orignalFile,
         relativePath: relativePath,
         baseName: baseName,
         patternName: patternName,
+        packPattern: packPattern,
         fullDir: fullDir,
         firstDir: firstDir,
         lastDir: lastDir,
@@ -532,16 +548,27 @@ function parseOrignalFileName(orignalFile, packBy) {
     }
     info.imgFile = imgFile;
 
-    packBy = packBy || packBy === 0 ? packBy : Config.packBy;
+    packBy = packBy || Config.packBy;
 
     if (packBy === "all") {
         info.packBy = Config.packName;
         info.parts = [baseName];
-    } else if (packBy === 0) {
-        info.packBy = (info.firstDir || Config.packName) //+ Config.imgFileExtName;
+    } else if (packBy === 'fullDir') {
+        info.packBy = (info.packPattern || info.fullDir || Config.packName) //+ Config.imgFileExtName;
         // info.parts = [baseName];
         info.parts = [info.packBy, baseName];
+    } else if (packBy === 'firstDir') {
+        info.packBy = (info.packPattern || info.firstDir || Config.packName) //+ Config.imgFileExtName;
+        // info.parts = [baseName];
+        info.parts = [info.packBy, baseName];
+    } else if (packBy === 'lastDir') {
+        info.packBy = (info.packPattern || info.lastDir || Config.packName) //+ Config.imgFileExtName;
+        // info.parts = [baseName];
+        info.parts = [info.packBy, baseName];
+    } else if (packBy === '0') {
+        // TODO
     } else {
+        var packByInt = parseInt(packBy, 10) || 1;
         var p = [];
         for (var i = 0; i < packBy; i++) {
             if (i >= filePartCount) {
@@ -783,7 +810,6 @@ function preparePackImages(imgInfoList, width, height, space) {
     height = packedAllList[0][3];
 
     console.log("SortImageRule : " + packedAllList[0][7]);
-    console.log('  { id: "' + Config.packName + '", src: "' + Config.packName + '.png" }');
 
     packed.forEach(function(p, idx) {
         var f = p[0],
@@ -865,6 +891,8 @@ function packImages(imgInfoList, size, outputFile, cb) {
             var stats = fs.statSync(outputFile);
             var fileSizeInBytes = stats["size"];
             var kb = (fileSizeInBytes / 1000).toFixed(2)
+            console.log('  { id: "' + outputFile + '", src: "' + outputFile + '.png" }');
+            console.log('\n');
             console.log("==== packed: " + outputFile + " ---- " + w + " * " + h + " , " + kb + "kb" + " ====");
             if (Config.optipng) {
                 console.log("start optipng " + outputFile + " ...");
