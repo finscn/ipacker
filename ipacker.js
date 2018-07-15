@@ -285,7 +285,6 @@ function createMapping(infoList, trimOnly) {
 
     console.log("\n");
     console.log("==== Mapping-file created : " + jsFile + " ====");
-    console.log("\n");
 
     var json = [];
     sourceList.forEach(function(s) {
@@ -294,9 +293,10 @@ function createMapping(infoList, trimOnly) {
     json = '[\n' + json.join(',\n') + '\n]\n';
     fs.writeFileSync(jsonFile, json);
 
-    console.log("==== Source-file created : " + jsonFile + " ====");
     console.log("\n");
+    console.log("==== Source-file created : " + jsonFile + " ====");
 
+    console.log("\n");
     console.log("\n");
 
 }
@@ -891,12 +891,12 @@ function packImages(imgInfoList, size, outputFile, cb) {
             var stats = fs.statSync(outputFile);
             var fileSizeInBytes = stats["size"];
             var kb = (fileSizeInBytes / 1000).toFixed(2)
-            console.log('  { id: "' + outputFile + '", src: "' + outputFile + '.png" }');
             console.log('\n');
             console.log("==== packed: " + outputFile + " ---- " + w + " * " + h + " , " + kb + "kb" + " ====");
+            console.log('    { id: "' + outputFile + '", src: "' + outputFile + '.png" }');
             if (Config.optipng) {
-                console.log("start optipng " + outputFile + " ...");
-                var cmd = 'optipng -o4 "' + outputFile + '"';
+                console.log("  start optipng " + outputFile + " ...");
+                var cmd = '  optipng -o4 "' + outputFile + '"';
                 callCmd(cmd, function(stdout) {
                     cb && cb();
                 });
