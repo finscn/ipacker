@@ -167,7 +167,6 @@ function main() {
 
     console.log("\n");
     console.log("==== iPacker is working ====");
-    console.log("\n");
 
     inputFiles = getFiles(inputDir);
 
@@ -175,7 +174,6 @@ function main() {
         if (Config.doScale) {
             cleanDir(scaleOutputDir);
             startScale(function() {
-                // console.log("\n");
                 var scaledFiles = getFiles(scaleOutputDir);
                 inputDir = scaleOutputDir;
                 start(scaledFiles);
@@ -204,7 +202,6 @@ function start(files) {
     startParse(files, function(filesInfo) {
         if (Config.packBy && Config.trimBy) {
             startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
-                // console.log("\n");
                 startPack(fileInfoList, function(fileInfoList, packGroupInfo) {
                     createMapping(fileInfoList);
                     fsExt.removeSync(imgTrimMappingDir);
@@ -217,7 +214,6 @@ function start(files) {
             });
         } else if (Config.trimBy) {
             startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
-                // console.log("\n");
                 createMapping(fileInfoList, true);
             });
         }
@@ -893,7 +889,7 @@ function packImages(imgInfoList, size, outputFile, cb) {
             var stats = fs.statSync(outputFile);
             var fileSizeInBytes = stats["size"];
             var kb = (fileSizeInBytes / 1000).toFixed(2)
-            console.log('\n');
+            console.log("\n");
             console.log("==== packed: " + outputFile + " ( " + rule + " ) ---- " + w + " * " + h + " , " + kb + "kb" + " ====");
             console.log('    { id: "' + outputFile + '", src: "' + outputFile + '.png" }');
             if (Config.optipng) {
