@@ -20,6 +20,13 @@ var trimImagesInfo;
 var packMaxWidth = 2048;
 var packMaxHeight = 2048;
 
+var MAX_DIR_DEPTH = 10;
+var matchOperatorsRe = /[|\\{}()[\]^$+*?.]/g;
+
+function escapeRegExp(str) {
+    return str.replace(matchOperatorsRe, '\\$&');
+}
+
 var Config = {
     scale: "100%",
     borderWidth: 0,
@@ -37,6 +44,7 @@ var Config = {
     resDir: "res/image/",
     dirPart: 2,
 };
+
 var borderArgument;
 if (!module.parent) {
 
@@ -48,7 +56,7 @@ if (!module.parent) {
         .option('-t --trim [trim color]', "trim all images, default trim color is transparent")
         // .option("-a --alpha [string]", "packed file's name")
         .option('-p --pack [int number/"all"]', 'pack by a part of nameParts: 0,1,2,3,4... .\n\t "all"/empty means all-in-one')
-        .option('--pattern [string]', 'packed name, keys: {fullDir},{firstDir},{secondDir},{lastDir},{name}')
+        .option('--pattern [string]', 'packed name, keys: {fullDir},{firstDir},{dir[0...]},{lastDir},{name}')
         .option("-n --name [string]", "packed file's name")
         .option('--width [int number]', "pack file's min width")
         .option('--height [int number]', "pack file's min height")
@@ -149,6 +157,7 @@ if (!module.parent) {
     main();
 }
 
+
 function main() {
 
     console.log("\n");
@@ -217,17 +226,19 @@ function createMapping(infoList, trimOnly) {
         return;
     }
 
-    var code1 = "var ImageMapping=ImageMapping||{};\n(function(){";
-    // var code2 = "Image.merge(ImageMapping,_imgs);\n\n}());";
-    var code2 = "for (var key in _imgs){ ImageMapping[key]=_imgs[key]; }\n\n})();";
-
+    var sourceList = [];
     var mapping = {};
     var k = Config.keep;
     infoList.forEach(function(info) {
+        sourceList.push({
+            id: info.patternName,
+            src: info.relativePath,
+        });
         if (info.imageInfo) {
             var imgInfo = info.imageInfo;
             var f = {
                 img: trimOnly ? info.baseName : info.packBy,
+                // source: info.relativePath,
                 x: imgInfo.x + Config.borderWidth,
                 y: imgInfo.y + Config.borderWidth,
                 w: imgInfo.w - Config.borderWidth * 2,
@@ -243,23 +254,42 @@ function createMapping(infoList, trimOnly) {
             mapping[info.patternName] = f;
         }
     });
+
+    var jsFile;
+    var jsonFile;
+
+    if (trimOnly) {
+        jsFile = Path.normalize(imgTrimMappingDir + Config.trimName + ".js");
+        jsonFile = Path.normalize(imgTrimMappingDir + "source.json");
+    } else {
+        jsFile = Path.normalize(imgMappingDir + Config.packName + ".js");
+        jsonFile = Path.normalize(imgMappingDir + "source.json");
+    }
+
+    var code1 = "var ImageMapping=ImageMapping||{};\n(function(){";
+    // var code2 = "Image.merge(ImageMapping,_imgs);\n\n}());";
+    var code2 = "for (var key in _imgs){ ImageMapping[key]=_imgs[key]; }\n\n})();";
     var outputStr = "var _imgs=" + JSON.stringify(mapping, function(k, v) {
         return v
     }, 2) + ";";
     var code = code1 + "\n\n" + outputStr + "\n\n" + code2;
 
-    var js;
+    fs.writeFileSync(jsFile, code);
 
-    if (trimOnly) {
-        js = Path.normalize(imgTrimMappingDir + Config.trimName + ".js");
-    } else {
-        js = Path.normalize(imgMappingDir + Config.packName + ".js");
-    }
-    fs.writeFileSync(js, code);
+    console.log("==== Mapping-file created : " + jsFile + " ====");
+    console.log("\n");
 
-    console.log("==== Mapping-file created : " + js + " ====");
+    var json = [];
+    sourceList.forEach(function(s) {
+        json.push('  { id: "' + s.id + '", src: "' + s.src + '" }')
+    })
+    json = '[\n' + json.join(',\n') + '\n]\n';
+    fs.writeFileSync(jsonFile, json);
 
-    console.log("\n\n");
+    console.log("==== Source-file created : " + jsonFile + " ====");
+    console.log("\n");
+
+    console.log("\n");
 
 }
 
@@ -399,8 +429,14 @@ function startParse(fileList, cb) {
 
 
 function parsePattern(pattern, key, value) {
-    var reg = new RegExp("\{[^\{\}]*" + key + "[^\{\}]*\}", 'g');
+    var keyReg = escapeRegExp(key);
+    var reg = new RegExp("\{[^\{\}]*" + keyReg + "[^\{\}]*\}", 'g');
     var match = pattern.match(reg);
+    if (value === true || value === undefined) {
+        return match;
+    }
+    // console.log(pattern, key, value, reg, match)
+
     if (match) {
         match.forEach(function(sub) {
             var idx = pattern.indexOf(sub);
@@ -418,16 +454,17 @@ function parsePattern(pattern, key, value) {
     return pattern;
 }
 
-function parseOrignalFileName(orignalFile, packBy) {
 
-    var dirName = Path.dirname(orignalFile);
-    dirName = Path.relative(inputDir, dirName) || "";
+function parseOrignalFileName(orignalFile, packBy) {
+    // var dirName = Path.dirname(orignalFile) || "";
+    // dirName = Path.relative(inputDir, dirName) || "";
+    var relativePath = Path.relative(inputDir, orignalFile) || "";
+    var dirName = Path.dirname(relativePath) || "";
     var dirs = dirName.split(Path.seq);
     var dirCount = dirs.length;
 
     var fullDir = dirs.join(Config.split) || "";
     var firstDir = dirs[0] || "";
-    var secondDir = dirs[1] || "";
     var lastDir = dirs[dirs.length - 1] || "";
 
     var extName = Path.extname(orignalFile);
@@ -437,11 +474,32 @@ function parseOrignalFileName(orignalFile, packBy) {
 
     var patternName;
     var pattern = Config.pattern;
+
     if (pattern) {
+
+        var hasIndex = {};
+        for (var i = 0; i < MAX_DIR_DEPTH; i++) {
+            var k = 'dir[' + i + ']';
+            if (parsePattern(pattern, k)) {
+                hasIndex[i] = true;
+            }
+            pattern = parsePattern(pattern, k, dirs[i] || "");
+        }
+
         pattern = parsePattern(pattern, 'fullDir', fullDir);
-        pattern = parsePattern(pattern, 'firstDir', firstDir);
-        pattern = parsePattern(pattern, 'secondDir', secondDir);
-        pattern = parsePattern(pattern, 'lastDir', lastDir);
+
+        if (hasIndex[0]) {
+            pattern = parsePattern(pattern, 'firstDir', "");
+        } else {
+            pattern = parsePattern(pattern, 'firstDir', firstDir);
+        }
+
+        if (hasIndex[dirCount - 1]) {
+            pattern = parsePattern(pattern, 'lastDir', "");
+        } else {
+            pattern = parsePattern(pattern, 'lastDir', lastDir);
+        }
+
         patternName = parsePattern(pattern, 'name', baseName);
         if (pattern === patternName) {
             patternName += baseName;
@@ -452,8 +510,11 @@ function parseOrignalFileName(orignalFile, packBy) {
 
     var info = {
         parts: [],
+        orignalFile: orignalFile,
+        relativePath: relativePath,
         baseName: baseName,
         patternName: patternName,
+        fullDir: fullDir,
         firstDir: firstDir,
         lastDir: lastDir,
     };
