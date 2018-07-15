@@ -161,6 +161,8 @@ if (!module.parent) {
 function main() {
 
     console.log("\n");
+    console.log("==== iPacker is working ====");
+    console.log("\n");
 
     inputFiles = getFiles(inputDir);
 
@@ -168,7 +170,7 @@ function main() {
         if (Config.doScale) {
             cleanDir(scaleOutputDir);
             startScale(function() {
-                console.log("\n");
+                // console.log("\n");
                 var scaledFiles = getFiles(scaleOutputDir);
                 inputDir = scaleOutputDir;
                 start(scaledFiles);
@@ -197,7 +199,7 @@ function start(files) {
     startParse(files, function(filesInfo) {
         if (Config.packBy && Config.trimBy) {
             startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
-                console.log("\n");
+                // console.log("\n");
                 startPack(fileInfoList, function(fileInfoList, packGroupInfo) {
                     createMapping(fileInfoList);
                     fsExt.removeSync(imgTrimMappingDir);
@@ -210,7 +212,7 @@ function start(files) {
             });
         } else if (Config.trimBy) {
             startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
-                console.log("\n");
+                // console.log("\n");
                 createMapping(fileInfoList, true);
             });
         }
@@ -276,6 +278,7 @@ function createMapping(infoList, trimOnly) {
 
     fs.writeFileSync(jsFile, code);
 
+    console.log("\n");
     console.log("==== Mapping-file created : " + jsFile + " ====");
     console.log("\n");
 
@@ -776,6 +779,8 @@ function preparePackImages(imgInfoList, width, height, space) {
     height = packedAllList[0][3];
 
     console.log("SortImageRule : " + packedAllList[0][7]);
+    console.log('  { id: "' + Config.packName + '", src: "' + Config.packName + '.png" }');
+
     packed.forEach(function(p, idx) {
         var f = p[0],
             fit = p[1];
@@ -1016,7 +1021,7 @@ function trimImg(img, outImg, cb) {
     var cmd = 'convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' -trim -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' "' + outImg + '"';
     // var cmd = 'convert "' + img + '" -trim "' + outImg + '"';
     callCmd(cmd, function() {
-        console.log("==== trimed : " + outImg + " ====");
+        // console.log("==== trimed : " + outImg + " ====");
         cb && cb();
     });
 }
