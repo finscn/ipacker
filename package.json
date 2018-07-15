@@ -2,6 +2,7 @@
   "name": "iPacker",
   "version": "0.1.0",
   "description": "A node.js tools for packing some images into one.",
+  "main": "ipacker.js",
   "keywords": [
     "pack",
     "image",
