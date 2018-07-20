@@ -11,9 +11,9 @@
   "author": "finscn",
   "license": "MIT",
   "dependencies": {
-    "commander": "~2.2.0",
-    "fs-extra": "^6.0.1",
-    "glob": "^3.2.11",
-    "plist": "^2.1.0"
+    "commander": "^2.16.0",
+    "fs-extra": "^7.0.0",
+    "glob": "^7.1.2",
+    "plist": "^3.0.1"
   }
 }
