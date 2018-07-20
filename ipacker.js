@@ -270,12 +270,12 @@ function createMapping(infoList, trimOnly) {
     }
 
     var code1 = "var ImageMapping=ImageMapping||{};\n(function(){";
-    // var code2 = "Image.merge(ImageMapping,_imgs);\n\n}());";
-    var code2 = "for (var key in _imgs){ ImageMapping[key]=_imgs[key]; }\n\n})();";
+    // var code2 = "Image.merge(ImageMapping,_imgs);\n}());";
+    var code2 = "for(var key in _imgs){ImageMapping[key]=_imgs[key];}\n})();";
     var outputStr = "var _imgs=" + JSON.stringify(mapping, function(k, v) {
         return v
     }, 2) + ";";
-    var code = code1 + "\n\n" + outputStr + "\n\n" + code2;
+    var code = code1 + "\n" + outputStr + "\n" + code2;
 
     fs.writeFileSync(jsFile, code);
 
@@ -343,8 +343,8 @@ function createJS(tree) {
     console.log("\n\n");
 
     var code1 = "var ImagePool=ImagePool||{};\n(function(){";
-    // var code2 = "Image.merge(ImagePool,_imgs);\n\n}());";
-    var code2 = "for (var key in _imgs){ ImagePool[key]=_imgs[key]; }\n\n})();";
+    // var code2 = "Image.merge(ImagePool,_imgs);\n}());";
+    var code2 = "for(var key in _imgs){ImagePool[key]=_imgs[key];}\n})();";
 
     var config;
     for (var key in tree) {
@@ -357,7 +357,7 @@ function createJS(tree) {
         var outputStr = "var _imgs=" + JSON.stringify(config, function(k, v) {
             return v
         }, 2) + ";";
-        var code = code1 + "\n\n" + outputStr + "\n\n" + code2;
+        var code = code1 + "\n" + outputStr + "\n" + code2;
 
         var js = Path.normalize(imgMappingDir + key + ".js");
         fs.writeFileSync(js, code);
