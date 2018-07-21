@@ -908,13 +908,13 @@ function packImages(imgInfoList, size, outputFile, cb) {
 
 
 function computeImageSize(imageInfo, fileName) {
-    imageInfo.ox -= Config.borderWidth;
-    imageInfo.oy -= Config.borderWidth;
-    imageInfo.sw -= Config.borderWidth * 2;
-    imageInfo.sh -= Config.borderWidth * 2;
-
+    // imageInfo.ox -= Config.borderWidth;
+    // imageInfo.oy -= Config.borderWidth;
+    // imageInfo.sw -= Config.borderWidth * 2;
+    // imageInfo.sh -= Config.borderWidth * 2;
     imageInfo.w += Config.borderWidth * 2;
     imageInfo.h += Config.borderWidth * 2;
+
     var f = parsePercent(Config.anchorX);
     var anchorX = f === false ? parseFloat(Config.anchorX) || 0 : imageInfo.sw * f;
     var f = parsePercent(Config.anchorY);
