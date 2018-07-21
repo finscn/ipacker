@@ -3,7 +3,7 @@
 var fs = require('fs');
 var cp = require('child_process');
 var Path = require('path');
-var fsExt = require('fs-extra')
+var fsExt = require('fs-extra');
 var glob = require('glob');
 var program = require('commander');
 
@@ -17,8 +17,8 @@ var inputFiles;
 var allImagesInfo;
 var trimImagesInfo;
 
-var packMaxWidth = 2048;
-var packMaxHeight = 2048;
+var packMaxWidth = 1024;
+var packMaxHeight = 1024;
 
 var MAX_DIR_DEPTH = 10;
 var matchOperatorsRe = /[|\\{}()[\]^$+*?.]/g;
