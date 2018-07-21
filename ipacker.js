@@ -17,8 +17,8 @@ var inputFiles;
 var allImagesInfo;
 var trimImagesInfo;
 
-var packMaxWidth = 1024;
-var packMaxHeight = 1024;
+var packMaxWidth = 2048;
+var packMaxHeight = 2048;
 
 var MAX_DIR_DEPTH = 10;
 var matchOperatorsRe = /[|\\{}()[\]^$+*?.]/g;
