@@ -700,9 +700,14 @@ function startPack(fileInfoList, cb) {
             var imgInfoList = packTrimInfo[packBy];
             var packedFile = _info.packedFile;
             var packedFileSize = _info.packedFileSize;
-            packImages(imgInfoList, packedFileSize, packedFile, function() {
+            if (packedFileSize) {
+                packImages(imgInfoList, packedFileSize, packedFile, function() {
+                    $next();
+                });
+            } else {
+                console.error("Can't pack: ", packedFile);
                 $next();
-            });
+            }
         }
         $next();
     } else {
@@ -864,7 +869,7 @@ function preparePackImages(imgInfoList, width, height, space) {
     }
 
     if (packedAllList.length < 1) {
-        console.log("Images are too many or too big");
+        console.error("Images are too many or too big");
         return null;
     }
 
@@ -877,14 +882,16 @@ function preparePackImages(imgInfoList, width, height, space) {
         d = d ? d : areaA - areaB;
         d = d ? d : a[3] - b[3];
         d = d ? d : a[6] - b[6];
-        return d
+        return d;
     });
-    packed = packedAllList[0][0];
-    unpacked = packedAllList[0][1];
-    width = packedAllList[0][2];
-    height = packedAllList[0][3];
 
-    var rule = packedAllList[0][7];
+    var bestRule = packedAllList[0];
+    packed = bestRule[0];
+    unpacked = bestRule[1];
+    width = bestRule[2];
+    height = bestRule[3];
+
+    var ruleName = bestRule[7];
 
     packed.forEach(function(p, idx) {
         var f = p[0],
@@ -898,7 +905,7 @@ function preparePackImages(imgInfoList, width, height, space) {
         packed[idx] = f;
     });
 
-    return [width, height, rule];
+    return [width, height, ruleName];
 }
 
 function computePackInfo(imgInfoList, maxWidth, maxHeight) {
@@ -928,7 +935,7 @@ function packImages(imgInfoList, size, outputFile, cb) {
 
     var width = size[0],
         height = size[1];
-    var rule = size[2];
+    var ruleName = size[2];
 
     if (Config.mipmap) {
         width = Math.pow(2, Math.ceil(Math.log(width) / Math.log(2)));
@@ -977,7 +984,7 @@ function packImages(imgInfoList, size, outputFile, cb) {
             var fileSizeInBytes = stats["size"];
             var kb = (fileSizeInBytes / 1000).toFixed(2)
             console.log("\n");
-            console.log("==== packed: " + outputFile + " ( " + rule + " ) ---- " + w + " * " + h + " , " + kb + "kb" + " ====");
+            console.log("==== packed: " + outputFile + " ( " + ruleName + " ) ---- " + w + " * " + h + " , " + kb + "kb" + " ====");
             console.log('    { id: "' + outputFile + '", src: "' + outputFile + '.png" }');
             if (Config.optipng) {
                 console.log("  start optipng " + outputFile + " ...");
@@ -991,7 +998,6 @@ function packImages(imgInfoList, size, outputFile, cb) {
         });
     });
 }
-
 
 
 function computeImageSize(imageInfo, fileName) {
