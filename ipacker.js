@@ -73,6 +73,7 @@ if (!module.parent) {
         .option('--shadow [string]', 'shadow-file')
         .option('--configOnly', "create config file only")
         .option('--plist', "use plist")
+        .option('--mipmap', "use mipmap")
         .parse(process.argv);
 
     if (process.argv.length < 3) {
@@ -114,6 +115,7 @@ if (!module.parent) {
         var configOnly = program.configOnly || false;
         var borderWidth = parseInt(program.margin || 0, 10);
         var plist = program.plist || false;
+        var mipmap = program.mipmap || false;
 
         trimBy = trimBy === true ? "transparent" : (trimBy || false);
 
@@ -151,6 +153,7 @@ if (!module.parent) {
             flipX: program.flipX || Config.flipY, //"50%",
             keep: keep,
             plist: plist,
+            mipmap: mipmap,
         };
 
         for (var key in _config) {
@@ -247,6 +250,9 @@ function createMappingPlist(infoList, packGroupInfo) {
 
         var textureFileName = Path.basename(group.packedFile);
 
+        var w = group.packedFileSize[0];
+        var h = group.packedFileSize[1];
+
         var mapping = {
             "frames": {},
             "metadata": {
@@ -254,10 +260,11 @@ function createMappingPlist(infoList, packGroupInfo) {
                 "pixelFormat": "RGBA8888",
                 "premultiplyAlpha": false,
                 "realTextureFileName": textureFileName,
-                "size": "{" + group.packedFileSize + "}",
+                "size": "{" + [w, h] + "}",
                 "textureFileName": textureFileName,
             }
         };
+
         group.forEach(function(info) {
 
             if (info.imageInfo) {
@@ -861,7 +868,6 @@ function preparePackImages(imgInfoList, width, height, space) {
     if (packedAllList.length < 1) {
         console.log("Images are too many or too big");
         return null;
-        // preparePackImages(unpacked, width, height, packedIndex + 1);
     }
 
     packedAllList.sort(function(a, b) {
@@ -892,8 +898,8 @@ function preparePackImages(imgInfoList, width, height, space) {
         f.inDown = fit.inDown;
         f.index = fit.index;
         packed[idx] = f;
-
     });
+
     return [width, height, rule];
 }
 
@@ -926,6 +932,11 @@ function packImages(imgInfoList, size, outputFile, cb) {
         height = size[1];
     var rule = size[2];
 
+    if (Config.mipmap) {
+        width = Math.pow(2, Math.ceil(Math.log(width) / Math.log(2)));
+        height = Math.pow(2, Math.ceil(Math.log(height) / Math.log(2)));
+    }
+
     var cmd = ['convert',
         '-size',
         width + 'x' + height,
@@ -933,28 +944,32 @@ function packImages(imgInfoList, size, outputFile, cb) {
     ];
 
     imgInfoList.forEach(function(imgInfo, idx) {
-        cmd = cmd.concat(drawImage(imgInfo.imgFile, imgInfo.x, imgInfo.y));
+        cmd = cmd.concat(drawImage(imgInfo.imgFile, imgInfo.x + Config.borderWidth, imgInfo.y + Config.borderWidth));
 
         // cmd = cmd.concat(strokeRect(imgInfo.x, imgInfo.y, imgInfo.w, imgInfo.h, 2, "red"));
         // cmd = cmd.concat(fillText(imgInfo.index, imgInfo.x + 4, imgInfo.y + 16, 16, 'SourceSansProL'));
     });
 
-    var ext = null;
-    if (Config.trimBy === Config.packBgColor) {
-        ext = [
-            '-bordercolor',
-            '"' + Config.packBgColor + '"',
-            '-compose copy',
-            borderArgument
-        ];
-    }
+    // var ext = null;
+    // if (Config.trimBy === Config.packBgColor) {
+    //     ext = [
+    //         '-bordercolor',
+    //         '"' + Config.packBgColor + '"',
+    //         '-compose copy',
+    //         borderArgument
+    //     ];
+    // }
+
+    // cmd = cmd.concat([
+    //     '-bordercolor',
+    //     '"' + Config.packBgColor + '"',
+    //     '-compose copy',
+    //     Config.trimBy ? '-trim' : '',
+    //     ext ? ext.join(' ') : borderArgument,
+    //     '"' + outputFile + '"'
+    // ]);
 
     cmd = cmd.concat([
-        '-bordercolor',
-        '"' + Config.packBgColor + '"',
-        '-compose copy',
-        Config.trimBy ? '-trim' : '',
-        ext ? ext.join(' ') : borderArgument,
         '"' + outputFile + '"'
     ]);
 
