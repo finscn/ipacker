@@ -1,6 +1,8 @@
 .DS_Store
 package-lock.json
-/node_modules
+
+node_modules
+_bak
 /input
 /output
 /example/split

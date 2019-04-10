@@ -6,7 +6,7 @@ var Path = require('path');
 var fsExt = require('fs-extra');
 var glob = require('glob');
 var program = require('commander');
-
+var plist = require('plist');
 
 var cwd = process.env.PWD || process.cwd();
 
@@ -72,6 +72,7 @@ if (!module.parent) {
         .option('--split [string]', 'file-part split char')
         .option('--shadow [string]', 'shadow-file')
         .option('--configOnly', "create config file only")
+        .option('--plist', "use plist")
         .parse(process.argv);
 
     if (process.argv.length < 3) {
@@ -112,6 +113,7 @@ if (!module.parent) {
         var packageHeight = parseInt(program.height, 10) || 64;
         var configOnly = program.configOnly || false;
         var borderWidth = parseInt(program.margin || 0, 10);
+        var plist = program.plist || false;
 
         trimBy = trimBy === true ? "transparent" : (trimBy || false);
 
@@ -148,6 +150,7 @@ if (!module.parent) {
             flipY: program.flipY || Config.flipX, //"50%",
             flipX: program.flipX || Config.flipY, //"50%",
             keep: keep,
+            plist: plist,
         };
 
         for (var key in _config) {
@@ -203,18 +206,18 @@ function start(files) {
         if (Config.packBy && Config.trimBy) {
             startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
                 startPack(fileInfoList, function(fileInfoList, packGroupInfo) {
-                    createMapping(fileInfoList);
+                    createPackMapping(fileInfoList, packGroupInfo);
                     fsExt.removeSync(imgTrimMappingDir);
                 });
             });
         } else if (Config.packBy) {
             startPack(filesInfo.list, function(fileInfoList, packGroupInfo) {
-                createMapping(fileInfoList);
+                createPackMapping(fileInfoList, packGroupInfo);
                 fsExt.removeSync(imgTrimMappingDir);
             });
         } else if (Config.trimBy) {
             startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
-                createMapping(fileInfoList, true);
+                createMappingJS(fileInfoList, packGroupInfo, true);
             });
         }
     });
@@ -222,7 +225,76 @@ function start(files) {
 
 
 
-function createMapping(infoList, trimOnly) {
+function createPackMapping(infoList, packGroupInfo) {
+    if (Config.plist) {
+        createMappingPlist(infoList, packGroupInfo);
+    } else {
+        createMappingJS(infoList, packGroupInfo, false);
+    }
+}
+
+function createMappingPlist(infoList, packGroupInfo) {
+
+    if (infoList.length < 1) {
+        console.log("==== Nothing to do ====");
+        return;
+    }
+
+    var k = Config.keep;
+
+    for (var packBy in packGroupInfo) {
+        var group = packGroupInfo[packBy];
+
+        var textureFileName = Path.basename(group.packedFile);
+
+        var mapping = {
+            "frames": {},
+            "metadata": {
+                "format": 3,
+                "pixelFormat": "RGBA8888",
+                "premultiplyAlpha": false,
+                "realTextureFileName": textureFileName,
+                "size": "{" + group.packedFileSize + "}",
+                "textureFileName": textureFileName,
+            }
+        };
+        group.forEach(function(info) {
+
+            if (info.imageInfo) {
+                var imgInfo = info.imageInfo;
+                var fileName = Path.basename(info.imgFile);
+                var x = imgInfo.x + Config.borderWidth;
+                var y = imgInfo.y + Config.borderWidth;
+                var w = imgInfo.w - Config.borderWidth * 2;
+                var h = imgInfo.h - Config.borderWidth * 2;
+                var f = {
+                    "aliases": [],
+                    "textureRotated": false,
+                    "spriteOffset": "{" + [imgInfo.ox, imgInfo.oy] + "}",
+                    "spriteSize": "{" + [w, h] + "}",
+                    "spriteSourceSize": "{" + [imgInfo.sw, imgInfo.sh] + "}",
+                    "textureRect": "{{" + [x, y] + "},{" + [w, h] + "}}",
+                };
+                mapping.frames[fileName] = f;
+            }
+
+        });
+
+        var code = plist.build(mapping);
+
+        var plistFile = Path.normalize(imgMappingDir + Config.packName + ".plist");
+
+        fs.writeFileSync(plistFile, code);
+
+        console.log("==== Mapping-file created : " + plistFile + " ====");
+    }
+
+    console.log("\n\n");
+
+}
+
+
+function createMappingJS(infoList, packGroupInfo, trimOnly) {
 
     if (infoList.length < 1) {
         console.log("==== Nothing to do ====");
@@ -269,13 +341,13 @@ function createMapping(infoList, trimOnly) {
         jsonFile = Path.normalize(imgMappingDir + "source.json");
     }
 
-    var code1 = "var ImageMapping=ImageMapping||{};\n(function(){";
-    // var code2 = "Image.merge(ImageMapping,_imgs);\n}());";
-    var code2 = "for(var key in _imgs){ImageMapping[key]=_imgs[key];}\n})();";
+    var codeStart = "var ImageMapping=ImageMapping||{};\n(function(){";
+    // var codeEnd = "Image.merge(ImageMapping,_imgs);\n}());";
+    var codeEnd = "for(var key in _imgs){ImageMapping[key]=_imgs[key];}\n})();";
     var outputStr = "var _imgs=" + JSON.stringify(mapping, function(k, v) {
         return v
     }, 2) + ";";
-    var code = code1 + "\n" + outputStr + "\n" + code2;
+    var code = codeStart + "\n" + outputStr + "\n" + codeEnd;
 
     fs.writeFileSync(jsFile, code);
 
@@ -342,9 +414,9 @@ function createJS(tree) {
     }
     console.log("\n\n");
 
-    var code1 = "var ImagePool=ImagePool||{};\n(function(){";
-    // var code2 = "Image.merge(ImagePool,_imgs);\n}());";
-    var code2 = "for(var key in _imgs){ImagePool[key]=_imgs[key];}\n})();";
+    var codeStart = "var ImagePool=ImagePool||{};\n(function(){";
+    // var codeEnd = "Image.merge(ImagePool,_imgs);\n}());";
+    var codeEnd = "for(var key in _imgs){ImagePool[key]=_imgs[key];}\n})();";
 
     var config;
     for (var key in tree) {
@@ -357,7 +429,7 @@ function createJS(tree) {
         var outputStr = "var _imgs=" + JSON.stringify(config, function(k, v) {
             return v
         }, 2) + ";";
-        var code = code1 + "\n" + outputStr + "\n" + code2;
+        var code = codeStart + "\n" + outputStr + "\n" + codeEnd;
 
         var js = Path.normalize(imgMappingDir + key + ".js");
         fs.writeFileSync(js, code);
@@ -415,7 +487,7 @@ function startParse(fileList, cb) {
         var imageInfo = info.imageInfo;
         readImageSize(info.orignalFile, function(w, h) {
             imageInfo.w = w;
-            imageInfo.h = h
+            imageInfo.h = h;
             imageInfo.ox = 0;
             imageInfo.oy = 0;
             imageInfo.sw = w;
@@ -544,7 +616,7 @@ function parseOrignalFileName(orignalFile, packBy) {
     }
     info.imgFile = imgFile;
 
-    packBy = packBy || Config.packBy;
+    packBy = (packBy || packBy === 0) ? packBy : Config.packBy;
 
     if (packBy === "all") {
         info.packBy = Config.packName;
@@ -586,37 +658,31 @@ function startPack(fileInfoList, cb) {
     cleanDir(imgMappingDir);
 
     var packGroupInfo = {};
-
     var packTrimInfo = {};
+
     fileInfoList.forEach(function(_info, idx) {
         var list = packGroupInfo[_info.packBy] = packGroupInfo[_info.packBy] || [];
         list.push(_info);
 
-        list = packTrimInfo[_info.packBy] = packTrimInfo[_info.packBy] || [];
+        var imgInfoList = packTrimInfo[_info.packBy] = packTrimInfo[_info.packBy] || [];
+        imgInfoList.push(_info.imageInfo);
         _info.imageInfo._index = idx;
-        list.push(_info.imageInfo)
     });
 
-    var packsInfo = [];
     for (var packBy in packTrimInfo) {
-
         var imgInfoList = packTrimInfo[packBy];
         var packedFile = Path.normalize(packOutputDir + "/" + packBy + Config.imgFileExtName);
-        var size = preparePackImages(imgInfoList);
-        if (!size) {
-            return;
-        }
+        var packedFileSize = preparePackImages(imgInfoList);
 
-        packsInfo.push({
-            packBy: packBy,
-            imgInfoList: imgInfoList,
-            packedFile: packedFile,
-            size: size,
-        });
+        var _info = packGroupInfo[packBy];
+        _info.packedFile = packedFile;
+        _info.packedFileSize = packedFileSize;
     }
 
     if (Config.doPack) {
-        var count = packsInfo.length;
+        var keys = Object.keys(packGroupInfo);
+        var count = keys.length;
+
         var idx = -1;
         var $next = function() {
             idx++;
@@ -624,11 +690,12 @@ function startPack(fileInfoList, cb) {
                 cb && cb(fileInfoList, packGroupInfo);
                 return;
             }
-            var packInfo = packsInfo[idx];
-            var imgInfoList = packInfo.imgInfoList;
-            var size = packInfo.size;
-            var packedFile = packInfo.packedFile;
-            packImages(imgInfoList, size, packedFile, function() {
+            var packBy = keys[idx];
+            var _info = packGroupInfo[packBy];
+            var imgInfoList = packTrimInfo[packBy];
+            var packedFile = _info.packedFile;
+            var packedFileSize = _info.packedFileSize;
+            packImages(imgInfoList, packedFileSize, packedFile, function() {
                 $next();
             });
         }
@@ -679,6 +746,13 @@ function startTrim(fileInfoList, cb) {
             trimFilesInfo.map[info.imgFile].push(info);
 
             computeTrimInfo(info.imgFile, function(imageInfo) {
+
+                // the information of
+                imageInfo.ox -= Config.borderWidth;
+                imageInfo.oy -= Config.borderWidth;
+                imageInfo.sw -= Config.borderWidth * 2;
+                imageInfo.sh -= Config.borderWidth * 2;
+
                 computeImageSize(imageInfo, info.imgFile);
                 info.imageInfo = imageInfo;
                 $next();
@@ -908,12 +982,13 @@ function packImages(imgInfoList, size, outputFile, cb) {
 
 
 function computeImageSize(imageInfo, fileName) {
+    imageInfo.w += Config.borderWidth * 2;
+    imageInfo.h += Config.borderWidth * 2;
+
     // imageInfo.ox -= Config.borderWidth;
     // imageInfo.oy -= Config.borderWidth;
     // imageInfo.sw -= Config.borderWidth * 2;
     // imageInfo.sh -= Config.borderWidth * 2;
-    imageInfo.w += Config.borderWidth * 2;
-    imageInfo.h += Config.borderWidth * 2;
 
     var f = parsePercent(Config.anchorX);
     var anchorX = f === false ? parseFloat(Config.anchorX) || 0 : imageInfo.sw * f;
@@ -984,7 +1059,6 @@ function fillText(text, x, y, size, font) {
 ////////////////////////////////////////////////////////////
 
 
-
 function computeTrimInfo(img, cb) {
     var cmd = 'convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' -trim info:-';
     callCmd(cmd, function(stdout) {
@@ -999,13 +1073,15 @@ function computeTrimInfo(img, cb) {
                 w: Number(size[0]),
                 h: Number(size[1]),
 
-                ox: Number(offset[0]),
-                oy: Number(offset[1]),
-                sw: Number(sourceSize[0]),
-                sh: Number(sourceSize[1]),
+                ox: Number(offset[0]) - Config.borderWidth,
+                oy: Number(offset[1]) - Config.borderWidth,
+                sw: Number(sourceSize[0]) - Config.borderWidth * 2,
+                sh: Number(sourceSize[1]) - Config.borderWidth * 2,
+
                 imgFile: getTrimedImageName(img),
             };
             // console.log(stdout,imageInfo.imgFile, offset, sourceSize)
+            // console.log(imageInfo)
             if (cb) {
                 cb(imageInfo)
             }
@@ -1051,7 +1127,7 @@ function trimImg(img, outImg, cb) {
     var cmd = 'convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' -trim -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' "' + outImg + '"';
     // var cmd = 'convert "' + img + '" -trim "' + outImg + '"';
     callCmd(cmd, function() {
-        // console.log("==== trimed : " + outImg + " ====");
+        console.log("==== trimed : " + outImg + " ====");
         cb && cb();
     });
 }
