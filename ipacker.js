@@ -8,14 +8,8 @@ var glob = require('glob');
 var program = require('commander');
 var plist = require('plist');
 
-var cwd = process.env.PWD || process.cwd();
-
 
 var GrowingPacker = require('./lib/packer.growing').GrowingPacker;
-
-var inputFiles;
-var allImagesInfo;
-var trimImagesInfo;
 
 var packMaxWidth = 2048;
 var packMaxHeight = 2048;
@@ -46,8 +40,25 @@ var Config = {
 };
 
 var borderArgument;
+var inputDir;
+var outputDir;
+var scaleOutputDir;
+var trimOutputDir;
+var packOutputDir;
+var imgMappingDir;
+var imgTrimMappingDir;
+
+var inputFiles;
+
+
 if (!module.parent) {
 
+    if (main(process.argv) === false) {
+        process.exit();
+    }
+}
+
+function main(argv) {
     program
         .version('0.5')
         .option('-i --input [string]', 'input dir name')
@@ -74,28 +85,21 @@ if (!module.parent) {
         .option('--configOnly', "create config file only")
         .option('--plist', "use plist")
         .option('--mipmap', "use mipmap")
-        .parse(process.argv);
+        .parse(argv);
 
-    if (process.argv.length < 3) {
+    if (argv.length < 3) {
         program.help();
-        process.exit();
+        return false;
     }
 
-    var inputDir = program.input || "./input/";
-    var outputDir = program.output || "./output/";
+    inputDir = Path.normalize((program.input || "./input/") + "/");
+    outputDir = Path.normalize((program.output || "./output/") + "/");
 
-    inputDir = Path.normalize(inputDir + "/");
-    outputDir = Path.normalize(outputDir + "/");
-
-    var orignalInputDir = inputDir;
-    var orignalOutputDir = outputDir;
-
-    var scaleOutputDir = Path.normalize(outputDir + "/scale/");
-    var trimOutputDir = Path.normalize(outputDir + "/trim/");
-    var packOutputDir = Path.normalize(outputDir + "/pack/");
-    var imgMappingDir = Path.normalize(packOutputDir + "/img-mapping/");
-    var imgTrimMappingDir = Path.normalize(trimOutputDir + "/img-mapping/");
-
+    scaleOutputDir = Path.normalize(outputDir + "/scale/");
+    trimOutputDir = Path.normalize(outputDir + "/trim/");
+    packOutputDir = Path.normalize(outputDir + "/pack/");
+    imgMappingDir = Path.normalize(packOutputDir + "/img-mapping/");
+    imgTrimMappingDir = Path.normalize(trimOutputDir + "/img-mapping/");
 
     (function() {
         var scale = program.scale;
@@ -164,12 +168,6 @@ if (!module.parent) {
 
 
     borderArgument = '-border ' + Config.borderWidth + 'x' + Config.borderWidth;
-
-    main();
-}
-
-
-function main() {
 
     console.log("\n");
     console.log("==== iPacker is working ====");
@@ -1428,6 +1426,7 @@ function getFiles(dir) {
 ///////////////////////////////////
 
 exports.Config = Config;
+exports.main = main;
 exports.packImages = packImages;
 exports.preparePackImages = preparePackImages;
 

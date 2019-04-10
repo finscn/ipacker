@@ -1,8 +1,11 @@
 {
   "name": "ipacker",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A node.js tools for packing some images into one.",
   "main": "ipacker.js",
+  "bin": {
+    "ipacker": "./bin/ipacker",
+  },
   "keywords": [
     "pack",
     "image",

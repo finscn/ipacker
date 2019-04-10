@@ -1,0 +1,7 @@
+#!/usr/bin/env node
+
+var ipacker = require('../ipacker.js');
+
+// var cwd = process.env.PWD || process.cwd();
+
+ipacker.main(process.argv)
