@@ -935,7 +935,7 @@ function packImages(imgInfoList, size, outputFile, cb) {
         height = Math.pow(2, Math.ceil(Math.log(height) / Math.log(2)));
     }
 
-    var cmd = ['convert',
+    var cmd = ['magick convert',
         '-size',
         width + 'x' + height,
         'xc:"' + Config.packBgColor + '"'
@@ -981,7 +981,7 @@ function packImages(imgInfoList, size, outputFile, cb) {
             console.log('    { id: "' + outputFile + '", src: "' + outputFile + '.png" }');
             if (Config.optipng) {
                 console.log("  start optipng " + outputFile + " ...");
-                var cmd = '  optipng -o4 "' + outputFile + '"';
+                var cmd = 'optipng -o4 "' + outputFile + '"';
                 callCmd(cmd, function(stdout) {
                     cb && cb();
                 });
@@ -1073,7 +1073,7 @@ function fillText(text, x, y, size, font) {
 
 
 function computeTrimInfo(img, cb) {
-    var cmd = 'convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' -trim info:-';
+    var cmd = 'magick convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' -trim info:-';
     callCmd(cmd, function(stdout) {
         if (stdout) {
             var rs = stdout.trim().split(" ");
@@ -1134,11 +1134,11 @@ function trimImages(imageFiles, cb) {
     $next();
 }
 
-// 'convert output/scale/PlatformA-1.png -trim output/trim/PlatformA-1.png'
+// 'magick convert output/scale/PlatformA-1.png -trim output/trim/PlatformA-1.png'
 
 function trimImg(img, outImg, cb) {
-    var cmd = 'convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' -trim -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' "' + outImg + '"';
-    // var cmd = 'convert "' + img + '" -trim "' + outImg + '"';
+    var cmd = 'magick convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' -trim -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' "' + outImg + '"';
+    // var cmd = 'magick convert "' + img + '" -trim "' + outImg + '"';
     callCmd(cmd, function() {
         console.log("==== trimed : " + outImg + " ====");
         cb && cb();
@@ -1212,10 +1212,10 @@ function resizeImage(img, scaleX, scaleY, outImg, cb) {
     var flipY = Config.flipY;
     var flip = (flipX ? '-flop ' : '') + (flipY ? '-flip ' : '');
     var cmd;
-    // cmd='convert "' + img + '" -resize ' + scaleX + 'x' + scaleY + '! "' + outImg + '"';
-    cmd = 'convert ' + flip + ' -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! "' + img + '" "' + outImg + '"';
-    // cmd='convert "' + img + '" -adaptive-resize ' + scaleX + 'x' + scaleY + '! "' + outImg + '"';
-    // cmd = 'convert -define filter:blur=0.5 -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! "' + img + '" "' + outImg + '"';
+    // cmd='magick convert "' + img + '" -resize ' + scaleX + 'x' + scaleY + '! "' + outImg + '"';
+    cmd = 'magick convert ' + flip + ' -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! "' + img + '" "' + outImg + '"';
+    // cmd='magick convert "' + img + '" -adaptive-resize ' + scaleX + 'x' + scaleY + '! "' + outImg + '"';
+    // cmd = 'magick convert -define filter:blur=0.5 -filter lanczos -resize ' + scaleX + 'x' + scaleY + '! "' + img + '" "' + outImg + '"';
     callCmd(cmd, function() {
         console.log("==== scaled : " + outImg + " ====");
         cb && cb();
@@ -1274,7 +1274,7 @@ function addShadow(inFile, outFile, shadowInfo, cb) {
     var width = inFile.width;
     var height = Math.max(inFile.height, Config.anchorY + shadowInfo.height);
 
-    var cmd = ['convert',
+    var cmd = ['magick convert',
         '-size',
         width + 'x' + height,
         'xc:"' + Config.packBgColor + '"'
@@ -1341,7 +1341,7 @@ function parseNumberAttr(attr) {
 
 function readImageSize(imgPath, cb) {
     var cmd;
-    cmd = 'identify -ping -format %wx%h "' + imgPath + '"';
+    cmd = 'magick identify -ping -format %wx%h "' + imgPath + '"';
     callCmd(cmd, function(stdout) {
         var split = stdout.trim().split(" ").shift().split("x");
         var width = parseInt(split[0], 10),
@@ -1431,7 +1431,7 @@ exports.packImages = packImages;
 exports.preparePackImages = preparePackImages;
 
 
-// convert *.png -resize 50% -set filename:orig "%f" 'converted/%[filename:orig].png'
-// convert *.tga -set filename:orig "%t" '%[filename:orig].png'
-// convert *.webp -set filename:orig "%t" '%[filename:orig].png'
-// convert unnamed.webp unnamed.png
+// magick convert *.png -resize 50% -set filename:orig "%f" 'converted/%[filename:orig].png'
+// magick convert *.tga -set filename:orig "%t" '%[filename:orig].png'
+// magick convert *.webp -set filename:orig "%t" '%[filename:orig].png'
+// magick convert unnamed.webp unnamed.png
