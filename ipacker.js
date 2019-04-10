@@ -11,8 +11,8 @@ var plist = require('plist');
 
 var GrowingPacker = require('./lib/packer.growing').GrowingPacker;
 
-var packMaxWidth = 2048;
-var packMaxHeight = 2048;
+var MAX_PACK_WIDTH = 2048;
+var MAX_PACK_HEIGHT = 2048;
 
 var MAX_DIR_DEPTH = 10;
 var matchOperatorsRe = /[|\\{}()[\]^$+*?.]/g;
@@ -71,8 +71,6 @@ function main(argv) {
         .option('--pattern [string]', 'the pattern of packed key: {fullDir},{firstDir},{dir[0...]},{lastDir},{name}')
         .option("-n --name [string]", "packed config file's name")
         .option("-r --root [string]", "relative path root")
-        .option('--width [int number]', "pack file's min width")
-        .option('--height [int number]', "pack file's min height")
         .option('-m --margin [int number]', "the margin of one image")
         .option('--flipX', "flipX images")
         .option('--flipY', "flipY images")
@@ -84,7 +82,11 @@ function main(argv) {
         .option('--shadow [string]', 'shadow-file')
         .option('--configOnly', "create config file only")
         .option('--plist', "use plist")
+        .option('--json', "use json")
         .option('--mipmap', "use mipmap")
+        // .option('--size [string]', "packed file's size: width,height")
+        .option('--maxSize [string]', "packed file's max-size: width,height")
+
         .parse(argv);
 
     if (argv.length < 3) {
@@ -114,12 +116,30 @@ function main(argv) {
         var anchor = program.anchor;
         var keep = program.keep;
 
-        var packageWidth = parseInt(program.width, 10) || 64; // 64 128 256 512 1024 2048
-        var packageHeight = parseInt(program.height, 10) || 64;
         var configOnly = program.configOnly || false;
         var borderWidth = parseInt(program.margin || 0, 10);
         var plist = program.plist || false;
+        var json = program.json || false;
         var mipmap = program.mipmap || false;
+
+        // var packageWidth = parseInt(program.width, 10) || 64; // 64 128 256 512 1024 2048
+        // var packageHeight = parseInt(program.height, 10) || 64;
+        var maxWidth = MAX_PACK_WIDTH;
+        var maxHeight = MAX_PACK_HEIGHT;
+        if (program.maxSize) {
+            var maxSize = program.maxSize.split(",");
+            if (maxSize.length < 2) {
+                maxSize = program.maxSize.split("*");
+            }
+            if (maxSize.length < 2) {
+                maxSize = program.maxSize.split("*");
+            }
+            if (maxSize.length < 2) {
+                maxSize[1] = maxSize[0];
+            }
+            maxWidth = parseInt(maxSize[0], 10);
+            maxHeight = parseInt(maxSize[1], 10);
+        }
 
         trimBy = trimBy === true ? "transparent" : (trimBy || false);
 
@@ -144,8 +164,8 @@ function main(argv) {
             trimName: name || Config.trimName,
             root: root,
             borderWidth: borderWidth || Config.borderWidth,
-            packageWidth: packageWidth,
-            packageHeight: packageHeight,
+            // packageWidth: packageWidth,
+            // packageHeight: packageHeight,
             doPack: !configOnly,
             doScale: !configOnly,
             doTrim: !configOnly,
@@ -157,7 +177,10 @@ function main(argv) {
             flipX: program.flipX || Config.flipY, //"50%",
             keep: keep,
             plist: plist,
+            json: json,
             mipmap: mipmap,
+            maxWidth: maxWidth,
+            maxHeight: maxHeight,
         };
 
         for (var key in _config) {
@@ -229,6 +252,9 @@ function start(files) {
 function createPackMapping(infoList, packGroupInfo) {
     if (Config.plist) {
         createMappingPlist(infoList, packGroupInfo);
+        if (Config.json) {
+            createMappingJS(infoList, packGroupInfo, false);
+        }
     } else {
         createMappingJS(infoList, packGroupInfo, false);
     }
@@ -245,11 +271,14 @@ function createMappingPlist(infoList, packGroupInfo) {
 
     for (var packBy in packGroupInfo) {
         var group = packGroupInfo[packBy];
-
-        var textureFileName = Path.basename(group.packedFile);
+        if (!group.packedFileSize) {
+            continue;
+        }
 
         var w = group.packedFileSize[0];
         var h = group.packedFileSize[1];
+
+        var textureFileName = Path.basename(group.packedFile);
 
         var mapping = {
             "frames": {},
@@ -285,16 +314,15 @@ function createMappingPlist(infoList, packGroupInfo) {
 
         });
 
+        var mappingFile = Path.normalize(imgMappingDir + Config.packName + ".plist");
         var code = plist.build(mapping);
 
-        var plistFile = Path.normalize(imgMappingDir + Config.packName + ".plist");
+        fs.writeFileSync(mappingFile, code);
 
-        fs.writeFileSync(plistFile, code);
-
-        console.log("==== Mapping-file created : " + plistFile + " ====");
+        console.log("==== Mapping-file created : " + mappingFile + " ====");
     }
 
-    console.log("\n\n");
+    console.log("\n");
 
 }
 
@@ -306,70 +334,90 @@ function createMappingJS(infoList, packGroupInfo, trimOnly) {
         return;
     }
 
+    var k = Config.keep;
+
     var sourceList = [];
     var mapping = {};
-    var k = Config.keep;
-    infoList.forEach(function(info) {
-        sourceList.push({
-            id: info.patternName,
-            src: (Config.root ? Config.root + "/" : "") + info.relativePath,
-        });
-        if (info.imageInfo) {
-            var imgInfo = info.imageInfo;
-            var f = {
-                img: trimOnly ? info.baseName : info.packBy,
-                // source: info.relativePath,
-                x: imgInfo.x + Config.borderWidth,
-                y: imgInfo.y + Config.borderWidth,
-                w: imgInfo.w - Config.borderWidth * 2,
-                h: imgInfo.h - Config.borderWidth * 2,
-                ox: k ? imgInfo.ox : 0,
-                oy: k ? imgInfo.oy : 0,
-                sw: k ? imgInfo.sw : imgInfo.w,
-                sh: k ? imgInfo.sh : imgInfo.h,
-            };
-            if (Config.anchor) {
-                f.anchor = imgInfo.anchor;
-            }
-            mapping[info.patternName] = f;
+
+    for (var packBy in packGroupInfo) {
+        var group = packGroupInfo[packBy];
+        if (!group.packedFileSize) {
+            continue;
         }
-    });
 
-    var jsFile;
-    var jsonFile;
+        group.forEach(function(info) {
+            sourceList.push({
+                id: info.patternName,
+                src: (Config.root ? Config.root + "/" : "") + info.relativePath,
+            });
+            if (info.imageInfo) {
+                var imgInfo = info.imageInfo;
+                var f = {
+                    img: trimOnly ? info.baseName : info.packBy,
+                    // source: info.relativePath,
+                    x: imgInfo.x + Config.borderWidth,
+                    y: imgInfo.y + Config.borderWidth,
+                    w: imgInfo.w - Config.borderWidth * 2,
+                    h: imgInfo.h - Config.borderWidth * 2,
+                    ox: k ? imgInfo.ox : 0,
+                    oy: k ? imgInfo.oy : 0,
+                    sw: k ? imgInfo.sw : imgInfo.w,
+                    sh: k ? imgInfo.sh : imgInfo.h,
+                };
+                if (Config.anchor) {
+                    f.anchor = imgInfo.anchor;
+                }
+                mapping[info.patternName] = f;
+            }
+        });
 
-    if (trimOnly) {
-        jsFile = Path.normalize(imgTrimMappingDir + Config.trimName + ".js");
-        jsonFile = Path.normalize(imgTrimMappingDir + "source.json");
-    } else {
-        jsFile = Path.normalize(imgMappingDir + Config.packName + ".js");
-        jsonFile = Path.normalize(imgMappingDir + "source.json");
     }
 
-    var codeStart = "var ImageMapping=ImageMapping||{};\n(function(){";
-    // var codeEnd = "Image.merge(ImageMapping,_imgs);\n}());";
-    var codeEnd = "for(var key in _imgs){ImageMapping[key]=_imgs[key];}\n})();";
-    var outputStr = "var _imgs=" + JSON.stringify(mapping, function(k, v) {
+    if (sourceList.length < 1) {
+        console.log("\n");
+        return;
+    }
+
+    var extName = Config.json ? ".json" : ".js";
+
+    var mappingFile;
+    var resourceFile;
+
+    if (trimOnly) {
+        mappingFile = Path.normalize(imgTrimMappingDir + Config.trimName + extName);
+        resourceFile = Path.normalize(imgTrimMappingDir + "resource.json");
+    } else {
+        mappingFile = Path.normalize(imgMappingDir + Config.packName + extName);
+        resourceFile = Path.normalize(imgMappingDir + "resource.json");
+    }
+
+    var code = JSON.stringify(mapping, function(k, v) {
         return v
-    }, 2) + ";";
-    var code = codeStart + "\n" + outputStr + "\n" + codeEnd;
+    }, 2);
 
-    fs.writeFileSync(jsFile, code);
+    if (!Config.json) {
+        var codeStart = "var ImageMapping=ImageMapping||{};\n(function(){";
+        // var codeEnd = "Image.merge(ImageMapping,_imgs);\n}());";
+        var codeEnd = "for(var key in _imgs){ImageMapping[key]=_imgs[key];}\n})();";
+        var outputStr = "var _imgs=" + code + ";";
+        code = codeStart + "\n" + outputStr + "\n" + codeEnd;
+    }
 
-    console.log("\n");
-    console.log("==== Mapping-file created : " + jsFile + " ====");
+    fs.writeFileSync(mappingFile, code);
+
+    // console.log("\n");
+    console.log("==== Mapping-file created : " + mappingFile + " ====");
 
     var json = [];
     sourceList.forEach(function(s) {
         json.push('  { id: "' + s.id + '", src: "' + s.src + '" }')
     })
     json = '[\n' + json.join(',\n') + '\n]\n';
-    fs.writeFileSync(jsonFile, json);
+    fs.writeFileSync(resourceFile, json);
 
-    console.log("\n");
-    console.log("==== Source-file created : " + jsonFile + " ====");
+    // console.log("\n");
+    console.log("==== Resource-file created : " + resourceFile + " ====");
 
-    console.log("\n");
     console.log("\n");
 
 }
@@ -406,6 +454,7 @@ function createImagesTree(fileInfoList) {
             obj.frame = f;
         }
     });
+
     return tree;
 
 }
@@ -678,7 +727,6 @@ function startPack(fileInfoList, cb) {
         var imgInfoList = packTrimInfo[packBy];
         var packedFile = Path.normalize(packOutputDir + "/" + packBy + Config.imgFileExtName);
         var packedFileSize = preparePackImages(imgInfoList);
-
         var _info = packGroupInfo[packBy];
         _info.packedFile = packedFile;
         _info.packedFileSize = packedFileSize;
@@ -705,7 +753,8 @@ function startPack(fileInfoList, cb) {
                     $next();
                 });
             } else {
-                console.error("Can't pack: ", packedFile);
+                console.error("Can't pack " + packedFile + " : images are too many or too big.\n" +
+                    "    The packed maxSize is " + Config.maxWidth + "," + Config.maxHeight + ".");
                 $next();
             }
         }
@@ -834,9 +883,10 @@ var SortImageRule = {
 };
 
 function preparePackImages(imgInfoList, width, height, space) {
+    var maxWidth = width || Config.maxWidth;
+    var maxHeight = height || Config.maxHeight;
     space = space || 0;
-    var maxWidth = width || packMaxWidth;
-    var maxHeight = height || packMaxHeight;
+
     imgInfoList.forEach(function(info) {
         // delete info.fit;
         info.w += space;
@@ -869,7 +919,6 @@ function preparePackImages(imgInfoList, width, height, space) {
     }
 
     if (packedAllList.length < 1) {
-        console.error("Images are too many or too big");
         return null;
     }
 
@@ -986,6 +1035,7 @@ function packImages(imgInfoList, size, outputFile, cb) {
             console.log("\n");
             console.log("==== packed: " + outputFile + " ( " + ruleName + " ) ---- " + w + " * " + h + " , " + kb + "kb" + " ====");
             console.log('    { id: "' + outputFile + '", src: "' + outputFile + '.png" }');
+            console.log("\n");
             if (Config.optipng) {
                 console.log("  start optipng " + outputFile + " ...");
                 var cmd = 'optipng -o4 "' + outputFile + '"';
