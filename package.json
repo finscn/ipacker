@@ -1,6 +1,6 @@
 {
   "name": "ipacker",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "A node.js tools for packing some images into one.",
   "main": "ipacker.js",
   "bin": {
