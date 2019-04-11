@@ -42,11 +42,17 @@ var Config = {
 var borderArgument;
 var inputDir;
 var outputDir;
+
 var scaleOutputDir;
+
+var extrudeOutputDir;
+var imgExtrudeMappingDir;
+
 var trimOutputDir;
+var imgTrimMappingDir;
+
 var packOutputDir;
 var imgMappingDir;
-var imgTrimMappingDir;
 
 var inputFiles;
 
@@ -71,7 +77,8 @@ function main(argv) {
         .option('--pattern [string]', 'the pattern of packed key: {fullDir},{firstDir},{dir[0...]},{lastDir},{name}')
         .option("-n --name [string]", "packed config file's name")
         .option("-r --root [string]", "relative path root")
-        .option('-m --margin [int number]', "the margin of one image")
+        .option('-m --margin [int number]', "the margin of every image")
+        .option('--extrude [int number]', "extrude some pixels for every image")
         .option('--flipX', "flipX images")
         .option('--flipY', "flipY images")
         .option('--anchor [boolean]', "keep anchor information", false)
@@ -84,6 +91,7 @@ function main(argv) {
         .option('--plist', "use plist")
         .option('--json', "use json")
         .option('--mipmap', "use mipmap")
+        .option('--rotated', "try to rotate")
         // .option('--size [string]', "packed file's size: width,height")
         .option('--maxSize [string]', "packed file's max-size: width,height")
 
@@ -98,10 +106,13 @@ function main(argv) {
     outputDir = Path.normalize((program.output || "./output/") + "/");
 
     scaleOutputDir = Path.normalize(outputDir + "/scale/");
+
+    extrudeOutputDir = Path.normalize(outputDir + "/extrude/");
+    imgExtrudeMappingDir = Path.normalize(extrudeOutputDir + "/img-mapping/");
     trimOutputDir = Path.normalize(outputDir + "/trim/");
+    imgTrimMappingDir = Path.normalize(trimOutputDir + "/img-mapping/");
     packOutputDir = Path.normalize(outputDir + "/pack/");
     imgMappingDir = Path.normalize(packOutputDir + "/img-mapping/");
-    imgTrimMappingDir = Path.normalize(trimOutputDir + "/img-mapping/");
 
     (function() {
         var scale = program.scale;
@@ -118,9 +129,11 @@ function main(argv) {
 
         var configOnly = program.configOnly || false;
         var borderWidth = parseInt(program.margin || 0, 10);
+        var extrude = parseInt(program.extrude || 0, 10);
         var plist = program.plist || false;
         var json = program.json || false;
         var mipmap = program.mipmap || false;
+        var rotated = program.rotated || false;
 
         // var packageWidth = parseInt(program.width, 10) || 64; // 64 128 256 512 1024 2048
         // var packageHeight = parseInt(program.height, 10) || 64;
@@ -169,6 +182,7 @@ function main(argv) {
             doPack: !configOnly,
             doScale: !configOnly,
             doTrim: !configOnly,
+            doExtrude: !configOnly,
             split: program.split || Config.split,
             anchor: anchor,
             anchorX: program.anchorX || Config.anchorX, //"50%",
@@ -179,6 +193,8 @@ function main(argv) {
             plist: plist,
             json: json,
             mipmap: mipmap,
+            extrude: extrude,
+            rotated: rotated,
             maxWidth: maxWidth,
             maxHeight: maxHeight,
         };
@@ -220,6 +236,9 @@ function start(files) {
     if (Config.doTrim && Config.trimBy) {
         cleanDir(trimOutputDir);
     }
+    if (Config.doExtrude && Config.extrude) {
+        cleanDir(extrudeOutputDir);
+    }
     if (Config.doPack && Config.packBy) {
         cleanDir(packOutputDir);
     }
@@ -227,23 +246,13 @@ function start(files) {
     files = files || inputFiles;
 
     startParse(files, function(filesInfo) {
-        if (Config.packBy && Config.trimBy) {
-            startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
+        startTrim(filesInfo.list, function(fileInfoList) {
+            startExtrude(filesInfo.list, function(fileInfoList) {
                 startPack(fileInfoList, function(fileInfoList, packGroupInfo) {
                     createPackMapping(fileInfoList, packGroupInfo);
-                    fsExt.removeSync(imgTrimMappingDir);
                 });
             });
-        } else if (Config.packBy) {
-            startPack(filesInfo.list, function(fileInfoList, packGroupInfo) {
-                createPackMapping(fileInfoList, packGroupInfo);
-                fsExt.removeSync(imgTrimMappingDir);
-            });
-        } else if (Config.trimBy) {
-            startTrim(filesInfo.list, function(fileInfoList, trimFilesInfo) {
-                createMappingJS(fileInfoList, packGroupInfo, true);
-            });
-        }
+        });
     });
 }
 
@@ -267,8 +276,6 @@ function createMappingPlist(infoList, packGroupInfo) {
         return;
     }
 
-    var k = Config.keep;
-
     for (var packBy in packGroupInfo) {
         var group = packGroupInfo[packBy];
         if (!group.packedFileSize) {
@@ -288,27 +295,28 @@ function createMappingPlist(infoList, packGroupInfo) {
                 "premultiplyAlpha": false,
                 "realTextureFileName": textureFileName,
                 "size": "{" + [w, h] + "}",
-                "textureFileName": textureFileName,
+                "textureFileName": textureFileName
             }
         };
 
         group.forEach(function(info) {
 
             if (info.imageInfo) {
-                var imgInfo = info.imageInfo;
                 var fileName = Path.basename(info.imgFile);
-                var x = imgInfo.x + Config.borderWidth;
-                var y = imgInfo.y + Config.borderWidth;
-                var w = imgInfo.w - Config.borderWidth * 2;
-                var h = imgInfo.h - Config.borderWidth * 2;
+                var imgInfo = info.imageInfo;
+
+                var desc = parseImgInfoForMapping(imgInfo);
+                var r = desc.textureRect;
+
                 var f = {
                     "aliases": [],
-                    "textureRotated": false,
-                    "spriteOffset": "{" + [imgInfo.ox, imgInfo.oy] + "}",
-                    "spriteSize": "{" + [w, h] + "}",
-                    "spriteSourceSize": "{" + [imgInfo.sw, imgInfo.sh] + "}",
-                    "textureRect": "{{" + [x, y] + "},{" + [w, h] + "}}",
+                    "textureRotated": desc.rotated,
+                    "spriteOffset": "{" + desc.offset + "}",
+                    "spriteSize": "{" + [r[2], r[3]] + "}",
+                    "spriteSourceSize": "{" + desc.sourceSize + "}",
+                    "textureRect": "{{" + [r[0], r[1]] + "},{" + [r[2], r[3]] + "}}",
                 };
+
                 mapping.frames[fileName] = f;
             }
 
@@ -334,7 +342,7 @@ function createMappingJS(infoList, packGroupInfo, trimOnly) {
         return;
     }
 
-    var k = Config.keep;
+    var keep = Config.keep;
 
     var sourceList = [];
     var mapping = {};
@@ -352,18 +360,23 @@ function createMappingJS(infoList, packGroupInfo, trimOnly) {
             });
             if (info.imageInfo) {
                 var imgInfo = info.imageInfo;
+
+                var desc = parseImgInfoForMapping(imgInfo);
+                var r = desc.textureRect;
+
                 var f = {
                     img: trimOnly ? info.baseName : info.packBy,
                     // source: info.relativePath,
-                    x: imgInfo.x + Config.borderWidth,
-                    y: imgInfo.y + Config.borderWidth,
-                    w: imgInfo.w - Config.borderWidth * 2,
-                    h: imgInfo.h - Config.borderWidth * 2,
-                    ox: k ? imgInfo.ox : 0,
-                    oy: k ? imgInfo.oy : 0,
-                    sw: k ? imgInfo.sw : imgInfo.w,
-                    sh: k ? imgInfo.sh : imgInfo.h,
+                    x: r[0],
+                    y: r[1],
+                    w: r[2],
+                    h: r[3],
+                    ox: keep ? desc.offset[0] : 0,
+                    oy: keep ? desc.offset[1] : 0,
+                    sw: keep ? desc.sourceSize[0] : desc.size[0],
+                    sh: keep ? desc.sourceSize[1] : dese.size[1],
                 };
+
                 if (Config.anchor) {
                     f.anchor = imgInfo.anchor;
                 }
@@ -422,6 +435,41 @@ function createMappingJS(infoList, packGroupInfo, trimOnly) {
 
 }
 
+
+function parseImgInfoForMapping(imgInfo) {
+
+    var sourceInfo = imgInfo.sourceInfo;
+    var trimInfo = imgInfo.trimInfo;
+    var extrudeInfo = imgInfo.extrudeInfo;
+
+    var realInfo = extrudeInfo || trimInfo || sourceInfo;
+
+    var ox = realInfo.coreRect[0];
+    var oy = realInfo.coreRect[1];
+    var _coreX = ox - realInfo.offsetX;
+    var _coreY = oy - realInfo.offsetY;
+    var cx = imgInfo.x + _coreX + Config.borderWidth;
+    var cy = imgInfo.y + _coreY + Config.borderWidth;
+
+    var cw = realInfo.coreRect[2] - Config.borderWidth * 2;
+    var ch = realInfo.coreRect[3] - Config.borderWidth * 2;
+
+    var w = realInfo.width;
+    var h = realInfo.height;
+
+    var sw = sourceInfo.width;
+    var sh = sourceInfo.height;
+
+    var desc = {
+        "rotated": false,
+        "offset": [ox, oy],
+        "size": [w, h],
+        "sourceSize": [sw, sh],
+        "textureRect": [cx, cy, cw, ch],
+    };
+
+    return desc;
+}
 
 
 function createImagesTree(fileInfoList) {
@@ -533,21 +581,34 @@ function startParse(fileList, cb) {
         filesInfo.map[info.orignalFile] = info;
         var parsedInfo = parseOrignalFileName(info.orignalFile, Config.packBy);
         overide(info, parsedInfo);
-        info.imageInfo = {
-            x: 0,
-            y: 0,
-            imgFile: info.imgFile
-        };
+        info.imageInfo = {};
         var imageInfo = info.imageInfo;
         readImageSize(info.orignalFile, function(w, h) {
+
+            imageInfo.x = 0;
+            imageInfo.y = 0;
             imageInfo.w = w;
             imageInfo.h = h;
+
             imageInfo.ox = 0;
             imageInfo.oy = 0;
             imageInfo.sw = w;
             imageInfo.sh = h;
 
-            computeImageSize(imageInfo, info.orignalFile);
+            imageInfo.sourceInfo = {
+                // 当前图像 的大小:
+                width: w,
+                height: h,
+
+                // 当前图像 相对于`原始图片`的偏移坐标:
+                offsetX: 0,
+                offsetY: 0,
+
+                // 当前图像`核心区域`相对于`原始图片`的偏移坐标和大小
+                coreRect: [0, 0, w, h],
+            };
+
+            computeImageAnchor(imageInfo);
 
             $next();
         });
@@ -708,28 +769,36 @@ function parseOrignalFileName(orignalFile, packBy) {
 
 
 function startPack(fileInfoList, cb) {
+    if (!Config.packBy) {
+        cb && cb(fileInfoList);
+        return;
+    }
 
     cleanDir(imgMappingDir);
 
     var packGroupInfo = {};
-    var packTrimInfo = {};
+    var packListInfo = {};
 
     fileInfoList.forEach(function(_info, idx) {
-        var list = packGroupInfo[_info.packBy] = packGroupInfo[_info.packBy] || [];
-        list.push(_info);
+        var _infoList = packGroupInfo[_info.packBy] = packGroupInfo[_info.packBy] || [];
+        _infoList.push(_info);
+        _info.imageInfo.imgFile = _info.imgFile;
 
-        var imgInfoList = packTrimInfo[_info.packBy] = packTrimInfo[_info.packBy] || [];
+        _info.imageInfo.w += Config.borderWidth * 2;
+        _info.imageInfo.h += Config.borderWidth * 2;
+
+        var imgInfoList = packListInfo[_info.packBy] = packListInfo[_info.packBy] || [];
         imgInfoList.push(_info.imageInfo);
         _info.imageInfo._index = idx;
     });
 
-    for (var packBy in packTrimInfo) {
-        var imgInfoList = packTrimInfo[packBy];
+    for (var packBy in packGroupInfo) {
+        var _infoList = packGroupInfo[packBy];
+        var imgInfoList = packListInfo[packBy];
         var packedFile = Path.normalize(packOutputDir + "/" + packBy + Config.imgFileExtName);
         var packedFileSize = preparePackImages(imgInfoList);
-        var _info = packGroupInfo[packBy];
-        _info.packedFile = packedFile;
-        _info.packedFileSize = packedFileSize;
+        _infoList.packedFile = packedFile;
+        _infoList.packedFileSize = packedFileSize;
     }
 
     if (Config.doPack) {
@@ -744,10 +813,10 @@ function startPack(fileInfoList, cb) {
                 return;
             }
             var packBy = keys[idx];
-            var _info = packGroupInfo[packBy];
-            var imgInfoList = packTrimInfo[packBy];
-            var packedFile = _info.packedFile;
-            var packedFileSize = _info.packedFileSize;
+            var _infoList = packGroupInfo[packBy];
+            var imgInfoList = packListInfo[packBy];
+            var packedFile = _infoList.packedFile;
+            var packedFileSize = _infoList.packedFileSize;
             if (packedFileSize) {
                 packImages(imgInfoList, packedFileSize, packedFile, function() {
                     $next();
@@ -767,72 +836,135 @@ function startPack(fileInfoList, cb) {
 
 
 function startTrim(fileInfoList, cb) {
+    if (!Config.trimBy) {
+        cb && cb(fileInfoList);
+        return;
+    }
 
     cleanDir(imgTrimMappingDir);
-
-    var trimFilesInfo = {
-        list: [],
-        map: {},
-    };
 
     var count = fileInfoList.length;
     var idx = -1;
     var $next = function() {
         idx++;
         if (idx >= count) {
-
             if (Config.doTrim) {
-                trimImages(trimFilesInfo.list, function(trimedFiles) {
-                    cb && cb(fileInfoList, trimFilesInfo);
+                trimImages(fileInfoList, function(trimedFiles) {
+                    cb && cb(fileInfoList);
                 });
-
             } else {
                 fileInfoList.forEach(function(_info) {
-
+                    // do nothing
                 });
-                cb && cb(fileInfoList, trimFilesInfo);
+                cb && cb(fileInfoList);
             }
             return;
         }
 
         var info = fileInfoList[idx];
 
-        if (info.imgFile) {
-            if (!trimFilesInfo.map[info.imgFile]) {
-                trimFilesInfo.map[info.imgFile] = [];
-                trimFilesInfo.list.push(info.imgFile)
-            }
-            trimFilesInfo.map[info.imgFile].push(info);
+        var inImgFile = info.imgFile;
+        if (inImgFile) {
+            info.inImgFile = inImgFile;
 
-            computeTrimInfo(info.imgFile, function(imageInfo) {
+            computeTrimInfo(inImgFile, function(imageInfo) {
 
-                // the information of
-                imageInfo.ox -= Config.borderWidth;
-                imageInfo.oy -= Config.borderWidth;
-                imageInfo.sw -= Config.borderWidth * 2;
-                imageInfo.sh -= Config.borderWidth * 2;
+                computeImageAnchor(imageInfo);
+                Object.assign(info.imageInfo, imageInfo);
 
-                computeImageSize(imageInfo, info.imgFile);
-                info.imageInfo = imageInfo;
+                var outImgFile = getTrimedImageName(info.orignalFile);
+                info.outImgFile = outImgFile;
+                // console.log(info.imageInfo)
+
                 $next();
             });
         }
     }
     $next();
-
 }
 
 
+function startExtrude(fileInfoList, cb) {
+    if (!Config.extrude) {
+        cb && cb(fileInfoList);
+        return;
+    }
+
+    console.log("==== start to extrude ====");
+
+    cleanDir(imgExtrudeMappingDir);
+
+    var count = fileInfoList.length;
+    var idx = -1;
+    var $next = function() {
+        idx++;
+        if (idx >= count) {
+            extrudeImages(fileInfoList, function(extrudedFiles) {
+                cb && cb(fileInfoList);
+            });
+            return;
+        }
+
+        var info = fileInfoList[idx];
+        var inImgFile = info.imgFile;
+
+        if (inImgFile) {
+            info.inImgFile = inImgFile;
+
+            var extrudeWidth = Config.extrude;
+            var prev = info.imageInfo;
+
+            var ox = prev.ox - extrudeWidth;
+            var oy = prev.oy - extrudeWidth;
+            var w = prev.w + extrudeWidth * 2;
+            var h = prev.h + extrudeWidth * 2;
+
+            var imageInfo = {
+                x: 0,
+                y: 0,
+                w: w,
+                h: h,
+
+                ox: ox,
+                oy: oy,
+                sw: w,
+                sh: h,
+
+                extrudeInfo: {
+                    // 当前图像 的大小:
+                    width: w,
+                    height: h,
+
+                    // 当前图像 相对于`原始图片`的偏移坐标:
+                    offsetX: ox,
+                    offsetY: oy,
+
+                    // 当前图像`核心区域`相对于`原始图片`的偏移坐标和大小
+                    coreRect: [prev.ox, prev.oy, prev.w, prev.h],
+                },
+            };
+
+            computeImageAnchor(imageInfo);
+            Object.assign(info.imageInfo, imageInfo);
+
+            var outImgFile = getExtrudedImageName(info.orignalFile);
+            info.outImgFile = outImgFile;
+            // console.log(info.imageInfo)
+            $next();
+        }
+    }
+    $next();
+}
+
 
 function startScale(cb) {
-
     scaleImages(inputFiles, Config.scale, function(scale) {
         cb && cb();
     });
 }
 
-function startAddShadow(cb) {
 
+function startAddShadow(cb) {
     addShadows(inputFiles, Config.shadow, function() {
         console.log("==== all shadows added ====");
         cb && cb();
@@ -840,23 +972,22 @@ function startAddShadow(cb) {
 }
 
 
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
 
-
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
 
 var SortImageRule = {
     "maxHeightFirst": function(a, b) {
@@ -882,22 +1013,9 @@ var SortImageRule = {
     }
 };
 
-function preparePackImages(imgInfoList, width, height, space) {
+function preparePackImages(imgInfoList, width, height) {
     var maxWidth = width || Config.maxWidth;
     var maxHeight = height || Config.maxHeight;
-    space = space || 0;
-
-    imgInfoList.forEach(function(info) {
-        // delete info.fit;
-        info.w += space;
-        info.h += space;
-        if (info.w > maxWidth) {
-            maxWidth = info.w;
-        }
-        if (info.h > maxHeight) {
-            maxHeight = info.h;
-        }
-    });
 
     var packedAllList = [];
     var packed, unpacked, width, height;
@@ -943,8 +1061,8 @@ function preparePackImages(imgInfoList, width, height, space) {
     var ruleName = bestRule[7];
 
     packed.forEach(function(p, idx) {
-        var f = p[0],
-            fit = p[1];
+        var f = p[0];
+        var fit = p[1];
         f.fit = null;
         f.x = fit.x;
         f.y = fit.y;
@@ -963,7 +1081,7 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
         var f = imgInfoList[n];
         delete f.fit;
     }
-    var packer = new GrowingPacker(maxWidth, maxHeight);
+    var packer = new GrowingPacker(maxWidth, maxHeight, Config.rotated);
     packer.fit(imgInfoList);
 
     var packed = [];
@@ -982,8 +1100,9 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
 
 function packImages(imgInfoList, size, outputFile, cb) {
 
-    var width = size[0],
-        height = size[1];
+    var width = size[0];
+    var height = size[1];
+
     var ruleName = size[2];
 
     if (Config.mipmap) {
@@ -998,7 +1117,13 @@ function packImages(imgInfoList, size, outputFile, cb) {
     ];
 
     imgInfoList.forEach(function(imgInfo, idx) {
-        cmd = cmd.concat(drawImage(imgInfo.imgFile, imgInfo.x + Config.borderWidth, imgInfo.y + Config.borderWidth));
+        var rotated = imgInfo.rotated;
+
+        var x = imgInfo.x + Config.borderWidth;
+        var y = imgInfo.y + Config.borderWidth;
+        var rotation = rotated ? 90 : 0;
+
+        cmd = cmd.concat(drawImage(imgInfo.imgFile, x, y, rotation));
 
         // cmd = cmd.concat(strokeRect(imgInfo.x, imgInfo.y, imgInfo.w, imgInfo.h, 2, "red"));
         // cmd = cmd.concat(fillText(imgInfo.index, imgInfo.x + 4, imgInfo.y + 16, 16, 'SourceSansProL'));
@@ -1050,9 +1175,9 @@ function packImages(imgInfoList, size, outputFile, cb) {
 }
 
 
-function computeImageSize(imageInfo, fileName) {
-    imageInfo.w += Config.borderWidth * 2;
-    imageInfo.h += Config.borderWidth * 2;
+function computeImageAnchor(imageInfo) {
+    // imageInfo.w += Config.borderWidth * 2;
+    // imageInfo.h += Config.borderWidth * 2;
 
     // imageInfo.ox -= Config.borderWidth;
     // imageInfo.oy -= Config.borderWidth;
@@ -1067,15 +1192,23 @@ function computeImageSize(imageInfo, fileName) {
 }
 
 
+function drawImage(img, x, y, rotation) {
 
-function drawImage(img, x, y) {
-    return [
+    rotation = rotation || 0;
+
+    var cmd = [
         '-draw',
-        '"image Over',
-        x + ',' + y,
+        '"',
+        'translate ' + x + ',' + y,
+        'rotate ' + rotation,
+        'image Over',
         0 + ',' + 0,
-        '\\"' + img + '\\""'
+        0 + ',' + 0,
+        '\\"' + img + '\\"',
+        '"'
     ];
+
+    return cmd;
 }
 
 function strokeRect(x, y, w, h, lineWidth, color) {
@@ -1108,9 +1241,6 @@ function fillText(text, x, y, size, font) {
 }
 
 
-
-
-
 ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
@@ -1129,28 +1259,60 @@ function fillText(text, x, y, size, font) {
 
 
 function computeTrimInfo(img, cb) {
-    var cmd = 'magick convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' -trim info:-';
-    callCmd(cmd, function(stdout) {
+    var borderInfo = '-border 1x1';
+    var fixBorder = 1;
+
+    var cmd = [
+        'magick convert "' + img + '"',
+        '-bordercolor "' + Config.trimBy + '"',
+        '-compose copy ' + borderInfo,
+        '-trim',
+        'info:-'
+    ];
+
+    callCmd(cmd.join(' '), function(stdout) {
         if (stdout) {
             var rs = stdout.trim().split(" ");
             var size = rs[2].split("x");
             var offset = rs[3].split("+").slice(1, 3);
             var sourceSize = rs[3].split("+")[0].split("x");
+
+            var sw = Number(sourceSize[0]) - fixBorder * 2;
+            var sh = Number(sourceSize[1]) - fixBorder * 2;
+
+            var w = Number(size[0]);
+            var h = Number(size[1]);
+
+            var ox = (sw - w) >> 1;
+            var oy = (sh - h) >> 1;
+
             var imageInfo = {
                 x: 0,
                 y: 0,
-                w: Number(size[0]),
-                h: Number(size[1]),
+                w: w,
+                h: h,
 
-                ox: Number(offset[0]) - Config.borderWidth,
-                oy: Number(offset[1]) - Config.borderWidth,
-                sw: Number(sourceSize[0]) - Config.borderWidth * 2,
-                sh: Number(sourceSize[1]) - Config.borderWidth * 2,
+                ox: ox,
+                oy: oy,
+                sw: w,
+                sh: h,
 
-                imgFile: getTrimedImageName(img),
+                trimInfo: {
+                    // 当前图像 的大小:
+                    width: w,
+                    height: h,
+
+                    // 当前图像 相对于`原始图片`的偏移坐标:
+                    offsetX: ox,
+                    offsetY: oy,
+
+                    // 当前图像`核心区域`相对于`原始图片`的偏移坐标和大小
+                    coreRect: [ox, oy, w, h],
+                },
             };
-            // console.log(stdout,imageInfo.imgFile, offset, sourceSize)
+            // console.log(stdout, w, h, '--', sw, sh, '--', ox, oy);
             // console.log(imageInfo)
+            // console.log(stdout,imageInfo.imgFile, offset, sourceSize)
             if (cb) {
                 cb(imageInfo)
             }
@@ -1158,11 +1320,11 @@ function computeTrimInfo(img, cb) {
     });
 }
 
-function trimImages(imageFiles, cb) {
+function trimImages(fileInfoList, cb) {
 
     var trimedFiles = {};
 
-    var len = imageFiles.length;
+    var len = fileInfoList.length;
     var idx = -1;
     var $next = function() {
         idx++;
@@ -1172,16 +1334,19 @@ function trimImages(imageFiles, cb) {
 
             return;
         }
-        var img = imageFiles[idx];
+        var info = fileInfoList[idx];
 
-        var trimedFile = getTrimedImageName(img);
-        var dir = Path.dirname(trimedFile);
+        var inImgFile = info.inImgFile;
+        var outImgFile = info.outImgFile;
+
+        var dir = Path.dirname(outImgFile);
         if (!fs.existsSync(dir)) {
             fsExt.ensureDirSync(dir);
         }
 
-        trimImg(img, trimedFile, function() {
-            trimedFiles[img] = trimedFile;
+        trimImg(inImgFile, outImgFile, function() {
+            trimedFiles[inImgFile] = outImgFile;
+            info.imgFile = info.outImgFile;
             $next();
         });
 
@@ -1193,9 +1358,27 @@ function trimImages(imageFiles, cb) {
 // 'magick convert output/scale/PlatformA-1.png -trim output/trim/PlatformA-1.png'
 
 function trimImg(img, outImg, cb) {
-    var cmd = 'magick convert "' + img + '" -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' -trim -bordercolor "' + Config.trimBy + '" -compose copy ' + borderArgument + ' "' + outImg + '"';
-    // var cmd = 'magick convert "' + img + '" -trim "' + outImg + '"';
-    callCmd(cmd, function() {
+    var borderInfo;
+    var fixBorder;
+    var pageInfo;
+    var outputBorderInfo;
+
+    borderInfo = '-border 1x1';
+    fixBorder = 1;
+    pageInfo = '-set page "%[fx:page.width-2]x%[fx:page.height-2]+%[fx:page.x-1]+%[fx:page.y-1]"';
+    outputBorderInfo = '';
+
+    var cmd = [
+        'magick convert "' + img + '"',
+        '-bordercolor "' + Config.trimBy + '"',
+        '-compose copy ' + borderInfo,
+        '-trim',
+        pageInfo,
+        outputBorderInfo,
+        '"' + outImg + '"'
+    ];
+
+    callCmd(cmd.join(' '), function() {
         console.log("==== trimed : " + outImg + " ====");
         cb && cb();
     });
@@ -1209,6 +1392,65 @@ function getTrimedImageName(imgFile) {
 }
 
 
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+
+
+function extrudeImages(fileInfoList, cb) {
+
+    var extrudedFiles = {};
+
+    var len = fileInfoList.length;
+    var idx = -1;
+    var $next = function() {
+        idx++;
+        if (idx >= len) {
+            cb && cb(extrudedFiles);
+            return;
+        }
+        var info = fileInfoList[idx];
+        var inImgFile = info.inImgFile;
+        var outImgFile = info.outImgFile;
+
+        var dir = Path.dirname(outImgFile);
+        if (!fs.existsSync(dir)) {
+            fsExt.ensureDirSync(dir);
+        }
+
+        extrudeImg(inImgFile, outImgFile, function() {
+            extrudedFiles[inImgFile] = outImgFile;
+            info.imgFile = info.outImgFile;
+            $next();
+        });
+
+    };
+
+    $next();
+}
+
+function getExtrudedImageName(imgFile) {
+    var extrudedFile = Path.relative(inputDir, imgFile);
+    extrudedFile = Path.normalize(extrudeOutputDir + "/" + extrudedFile);
+    return extrudedFile;
+}
+
+function extrudeImg(img, outImg, cb) {
+    var e = Config.extrude;
+    var cmd = [
+        'magick convert "' + img + '"',
+        '-set option:distort:viewport %[fx:w+' + e * 2 + ']x%[fx:h+' + e * 2 + ']',
+        '-virtual-pixel Edge',
+        '-distort SRT "0,0 1,1 0 %[fx:' + e + '],%[fx:' + e + ']"',
+        ' "' + outImg + '"'
+    ];
+    callCmd(cmd.join(' '), function() {
+        console.log("==== extruded : " + outImg + " ====");
+        cb && cb();
+    });
+}
 
 
 ////////////////////////////////////////////////////////////
