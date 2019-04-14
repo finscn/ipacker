@@ -9,7 +9,8 @@ var program = require('commander');
 var plist = require('plist');
 
 
-var GrowingPacker = require('./lib/packer.growing').GrowingPacker;
+var MaxRectsBinPack = require('./lib/MaxRectsBinPack');
+
 
 var MAX_PACK_WIDTH = 2048;
 var MAX_PACK_HEIGHT = 2048;
@@ -91,6 +92,7 @@ function main(argv) {
         .option('--plist', "use plist")
         .option('--json', "use json")
         .option('--mipmap', "use mipmap")
+        .option('--square', "use square")
         .option('--rotated', "try to rotate")
         // .option('--size [string]', "packed file's size: width,height")
         .option('--maxSize [string]', "packed file's max-size: width,height")
@@ -133,6 +135,7 @@ function main(argv) {
         var plist = program.plist || false;
         var json = program.json || false;
         var mipmap = program.mipmap || false;
+        var square = program.square || false;
         var rotated = program.rotated || false;
 
         // var packageWidth = parseInt(program.width, 10) || 64; // 64 128 256 512 1024 2048
@@ -193,6 +196,7 @@ function main(argv) {
             plist: plist,
             json: json,
             mipmap: mipmap,
+            square: square,
             extrude: extrude,
             rotated: rotated,
             maxWidth: maxWidth,
@@ -787,18 +791,30 @@ function startPack(fileInfoList, cb) {
         _info.imageInfo.w += Config.borderWidth * 2;
         _info.imageInfo.h += Config.borderWidth * 2;
 
+
         var imgInfoList = packListInfo[_info.packBy] = packListInfo[_info.packBy] || [];
         imgInfoList.push(_info.imageInfo);
-        _info.imageInfo._index = idx;
+
+        _info.imageInfo._index = imgInfoList.length - 1;
+        _info.imageInfo._name = Path.basename(_info.orignalFile);
     });
 
     for (var packBy in packGroupInfo) {
         var _infoList = packGroupInfo[packBy];
         var imgInfoList = packListInfo[packBy];
         var packedFile = Path.normalize(packOutputDir + "/" + packBy + Config.imgFileExtName);
-        var packedFileSize = preparePackImages(imgInfoList);
         _infoList.packedFile = packedFile;
-        _infoList.packedFileSize = packedFileSize;
+
+        var packedInfo = computePackInfo(imgInfoList);
+        if (packedInfo) {
+            _infoList.packedFileSize = [
+                packedInfo.width,
+                packedInfo.height,
+                packedInfo.ruleName,
+            ];
+        } else {
+            _infoList.packedFileSize = null;
+        }
     }
 
     if (Config.doPack) {
@@ -989,112 +1005,55 @@ function startAddShadow(cb) {
 ////////////////////////////////////////////////////////////
 
 
-var SortImageRule = {
-    "maxHeightFirst": function(a, b) {
-        var d = b.h - a.h;
-        d = d ? d : b.w - a.w;
-        return d ? d : b.index - a.index;
-    },
-    "maxWidthFirst": function(a, b) {
-        var d = b.w - a.w;
-        d = d ? d : b.h - a.h;
-        return d ? d : b.index - a.index;
-    },
-    "maxSideFirst": function(a, b) {
-        var d = Math.max(b.w, b.h) - Math.max(a.w, a.h);
-        d = d ? d : b.h - a.h;
-        d = d ? d : b.w - a.w;
-        return d ? d : b.index - a.index;
-    },
-    "maxAreaFirst": function(a, b) {
-        var d = b.w * b.h - a.w * a.h;
-        d = d ? d : b.h - a.h;
-        return d ? d : b.index - a.index;
-    }
-};
-
-function preparePackImages(imgInfoList, width, height) {
-    var maxWidth = width || Config.maxWidth;
-    var maxHeight = height || Config.maxHeight;
-
-    var packedAllList = [];
-    var packed, unpacked, width, height;
-    var sn = 0;
-    for (var key in SortImageRule) {
-        var fn = SortImageRule[key];
-        imgInfoList.sort(fn);
-        var packInfo = computePackInfo(imgInfoList, maxWidth, maxHeight);
-        unpacked = packInfo[1];
-        if (unpacked) {
-            continue;
-        }
-        packed = packInfo[0];
-        width = packInfo[2];
-        height = packInfo[3];
-        var binWidth = Math.pow(2, Math.ceil(Math.log(width) / Math.log(2)));
-        var binHeight = Math.pow(2, Math.ceil(Math.log(height) / Math.log(2)));
-        packedAllList.push([packed, unpacked, width, height, width * height, binWidth * binHeight, sn++, key]);
-    }
-
-    if (packedAllList.length < 1) {
-        return null;
-    }
-
-    packedAllList.sort(function(a, b) {
-        var binAreaA = a[5],
-            binAreaB = b[5];
-        var areaA = a[4],
-            areaB = b[4];
-        var d = binAreaA - binAreaB;
-        d = d ? d : areaA - areaB;
-        d = d ? d : a[3] - b[3];
-        d = d ? d : a[6] - b[6];
-        return d;
-    });
-
-    var bestRule = packedAllList[0];
-    packed = bestRule[0];
-    unpacked = bestRule[1];
-    width = bestRule[2];
-    height = bestRule[3];
-
-    var ruleName = bestRule[7];
-
-    packed.forEach(function(p, idx) {
-        var f = p[0];
-        var fit = p[1];
-        f.fit = null;
-        f.x = fit.x;
-        f.y = fit.y;
-        f.inRight = fit.inRight;
-        f.inDown = fit.inDown;
-        f.index = fit.index;
-        packed[idx] = f;
-    });
-
-    return [width, height, ruleName];
-}
-
 function computePackInfo(imgInfoList, maxWidth, maxHeight) {
-    var out = false;
-    for (var n = 0; n < imgInfoList.length; n++) {
-        var f = imgInfoList[n];
-        delete f.fit;
-    }
-    var packer = new GrowingPacker(maxWidth, maxHeight, Config.rotated);
-    packer.fit(imgInfoList);
+    maxWidth = maxWidth || Config.maxWidth;
+    maxHeight = maxHeight || Config.maxHeight;
 
-    var packed = [];
-    var unpacked = [];
+    var listForPack = [];
     for (var n = 0; n < imgInfoList.length; n++) {
         var f = imgInfoList[n];
-        if (f.fit) {
-            packed.push([f, f.fit]);
-        } else {
-            unpacked.push(f);
+        var p = {
+            x: 0,
+            y: 0,
+            width: f.w,
+            height: f.h,
+            data: {
+                index: n,
+                w: f.w,
+                h: f.h,
+            }
         }
+        listForPack.push(p);
     }
-    return [packed, unpacked.length > 0 ? unpacked : null, packer.root.w, packer.root.h];
+
+    var packer = new MaxRectsBinPack.Packer(maxWidth, maxHeight, {
+        allowRotate: Config.rotated,
+        pot: Config.mipmap,
+        square: Config.square,
+    });
+
+    var result = packer.insertRects(listForPack);
+
+    if (result.done) {
+
+        result.rects.forEach(function(r) {
+            var idx = r.data.index;
+            var rotated = r.rotated;
+            var info = imgInfoList[idx];
+            info.x = r.x;
+            info.y = r.y;
+            info.rotated = r.rotated;
+        });
+
+        return {
+            width: result.width,
+            height: result.height,
+            rects: result.rects,
+            packedCount: result.packedCount,
+            ruleName: result.method,
+        };
+    }
+    return null;
 }
 
 
@@ -1105,10 +1064,10 @@ function packImages(imgInfoList, size, outputFile, cb) {
 
     var ruleName = size[2];
 
-    if (Config.mipmap) {
-        width = Math.pow(2, Math.ceil(Math.log(width) / Math.log(2)));
-        height = Math.pow(2, Math.ceil(Math.log(height) / Math.log(2)));
-    }
+    // if (Config.mipmap) {
+    //     width = Math.pow(2, Math.ceil(Math.log(width) / Math.log(2)));
+    //     height = Math.pow(2, Math.ceil(Math.log(height) / Math.log(2)));
+    // }
 
     var cmd = ['magick convert',
         '-size',
@@ -1726,7 +1685,6 @@ function getFiles(dir) {
 exports.Config = Config;
 exports.main = main;
 exports.packImages = packImages;
-exports.preparePackImages = preparePackImages;
 
 
 // magick convert *.png -resize 50% -set filename:orig "%f" 'converted/%[filename:orig].png'

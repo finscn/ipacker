@@ -6,7 +6,7 @@
 var fs = require('fs');
 var Path = require('path');
 var cp = require('child_process');
-var wrench = require('wrench');
+var fsExt = require('fs-extra');
 var glob = require('glob');
 var program = require('commander');
 
@@ -94,8 +94,8 @@ function parseFrame(fileName, frameData, callback) {
         y: top,
         w: width,
         h: height,
-        ox:offset[0],
-        oy:offset[1],
+        ox: offset[0],
+        oy: offset[1],
     };
     jsonData[fileName] = data;
 
@@ -108,7 +108,7 @@ function parseFrame(fileName, frameData, callback) {
         return;
     }
 
-    if (fileName.indexOf(".png") == -1) {
+    if (fileName.indexOf(".png") === -1) {
         fileName += ".png";
     }
 
@@ -138,16 +138,17 @@ function parseFrame(fileName, frameData, callback) {
 // convert 原始图片 -crop widthxheight+x+y 目标图片
 
 function cropImage(sourceImage, x, y, width, height, destImage, callback) {
-    var cmd = ['convert',
-        sourceImage,
+    var cmd = ['magick convert',
+        '"' + sourceImage + '"',
         '-crop',
         width + 'x' + height + "+" + x + '+' + y,
         destImage
     ];
-    callCmd(cmd.join(' '), function(err, stdout) {
+    cmd = cmd.join(' ');
+    callCmd(cmd, function(err, stdout) {
         console.log(destImage, "ok");
         if (err) {
-            // console.log(err);
+            console.log(err);
         }
         if (callback) {
             callback();
@@ -183,6 +184,7 @@ function convertPng(pngFile, callback) {
         tempPng,
         pngFile
     ];
+    // console.log(cmd)
     callCmd(cmd.join(' '), function(err, stdout) {
         console.log(pngFile, "ok");
         if (err) {
@@ -216,7 +218,7 @@ function callCmd(cmd, cb) {
 }
 
 function parseValue(value) {
-    if (typeof value == "string") {
+    if (typeof value === "string") {
         value = eval(value.replace(/\{/g, "[").replace(/\}/g, "]"));
     }
     return value;
@@ -241,8 +243,11 @@ convertPlist(plistFile, function() {
     obj = plist.parse(fs.readFileSync(plistFile, 'utf8'));
     frames = obj.frames;
     metadata = obj.metadata;
-    // imgFile = imgFile || metadata.realTextureFileName || metadata.textureFileName;
-    console.log('Image in config', metadata.realTextureFileName || metadata.textureFileName);
+    var format = metadata.format;
+    console.log("Plist format: ", format);
+
+    imgFile = imgFile || metadata.realTextureFileName || metadata.textureFileName;
+    console.log('Image in config', imgFile, metadata.realTextureFileName, metadata.textureFileName);
     if (imgFile) {
         convertPng(imgFile, function() {
             start(frames);
