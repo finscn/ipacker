@@ -1032,7 +1032,12 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
         square: Config.square,
     });
 
-    var result = packer.insertRects(listForPack);
+    // var result = packer.insertRects(listForPack, MaxRectsBinPack.ShortSideFit);
+    // var result = packer.insertRects(listForPack, MaxRectsBinPack.LongSideFit);
+    // var result = packer.insertRects(listForPack, MaxRectsBinPack.AreaFit);
+    // var result = packer.insertRects(listForPack, MaxRectsBinPack.BottomLeft);
+    // var result = packer.insertRects(listForPack, MaxRectsBinPack.ContactPoint);
+    var result = packer.insertRects(listForPack, /* try all */);
 
     if (result.done) {
 
@@ -1084,9 +1089,7 @@ function packImages(imgInfoList, size, outputFile, cb) {
         var rotation = rotated ? 90 : 0;
         var ox = 0;
         var oy = rotated ? -imgInfo.h : 0;
-        if (rotated) {
-            console.log(imgInfo.h)
-        }
+
         cmd = cmd.concat(drawImage(imgInfo.imgFile, x, y, rotation, ox, oy));
 
         // cmd = cmd.concat(strokeRect(imgInfo.x, imgInfo.y, imgInfo.w, imgInfo.h, 2, "red"));
