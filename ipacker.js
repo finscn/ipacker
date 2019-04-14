@@ -1032,10 +1032,7 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
         square: Config.square,
     });
 
-    var result = packer.insertRects(listForPack, MaxRectsBinPack.ShortSideFit);
-    console.log(result);
-    return;
-
+    // var result = packer.insertRects(listForPack, MaxRectsBinPack.ShortSideFit);
     // var result = packer.insertRects(listForPack, MaxRectsBinPack.LongSideFit);
     // var result = packer.insertRects(listForPack, MaxRectsBinPack.AreaFit);
     // var result = packer.insertRects(listForPack, MaxRectsBinPack.BottomLeft);
