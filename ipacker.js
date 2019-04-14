@@ -1017,11 +1017,7 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
             y: 0,
             width: f.w,
             height: f.h,
-            data: {
-                index: n,
-                w: f.w,
-                h: f.h,
-            }
+            index: n,
         }
         listForPack.push(p);
     }
@@ -1042,12 +1038,13 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
     if (result.done) {
 
         result.rects.forEach(function(r) {
-            var idx = r.data.index;
-            var rotated = r.rotated;
+            var idx = r.index;
+            var p = r.packedInfo;
+            var rotated = p.rotated;
             var info = imgInfoList[idx];
-            info.x = r.x;
-            info.y = r.y;
-            info.rotated = r.rotated;
+            info.x = p.x;
+            info.y = p.y;
+            info.rotated = p.rotated;
         });
 
         return {
@@ -1055,7 +1052,7 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
             height: result.height,
             rects: result.rects,
             packedCount: result.packedCount,
-            ruleName: result.method,
+            ruleName: result.rule,
         };
     }
     return null;
