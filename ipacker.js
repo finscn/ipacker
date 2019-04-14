@@ -1080,9 +1080,14 @@ function packImages(imgInfoList, size, outputFile, cb) {
 
         var x = imgInfo.x + Config.borderWidth;
         var y = imgInfo.y + Config.borderWidth;
-        var rotation = rotated ? 90 : 0;
 
-        cmd = cmd.concat(drawImage(imgInfo.imgFile, x, y, rotation));
+        var rotation = rotated ? 90 : 0;
+        var ox = 0;
+        var oy = rotated ? -imgInfo.h : 0;
+        if (rotated) {
+            console.log(imgInfo.h)
+        }
+        cmd = cmd.concat(drawImage(imgInfo.imgFile, x, y, rotation, ox, oy));
 
         // cmd = cmd.concat(strokeRect(imgInfo.x, imgInfo.y, imgInfo.w, imgInfo.h, 2, "red"));
         // cmd = cmd.concat(fillText(imgInfo.index, imgInfo.x + 4, imgInfo.y + 16, 16, 'SourceSansProL'));
@@ -1151,9 +1156,10 @@ function computeImageAnchor(imageInfo) {
 }
 
 
-function drawImage(img, x, y, rotation) {
+function drawImage(img, x, y, rotation, ox, oy) {
 
-    rotation = rotation || 0;
+    ox = ox || 0;
+    oy = oy || 0;
 
     var cmd = [
         '-draw',
@@ -1161,7 +1167,7 @@ function drawImage(img, x, y, rotation) {
         'translate ' + x + ',' + y,
         'rotate ' + rotation,
         'image Over',
-        0 + ',' + 0,
+        ox + ',' + oy,
         0 + ',' + 0,
         '\\"' + img + '\\"',
         '"'
