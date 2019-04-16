@@ -9,7 +9,7 @@ var program = require('commander');
 var plist = require('plist');
 
 
-var MaxRectsBinPack = require('./lib/MaxRectsBinPack');
+var MaxRectsPacking = require('./lib/MaxRectsPacking');
 
 
 var MAX_PACK_WIDTH = 2048;
@@ -838,6 +838,7 @@ function startPack(fileInfoList, cb) {
                     $next();
                 });
             } else {
+                console.log();
                 console.error("Can't pack " + packedFile + " : images are too many or too big.\n" +
                     "    The packed maxSize is " + Config.maxWidth + "," + Config.maxHeight + ".");
                 $next();
@@ -1013,38 +1014,47 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
     for (var n = 0; n < imgInfoList.length; n++) {
         var f = imgInfoList[n];
         var p = {
-            x: 0,
-            y: 0,
             width: f.w,
             height: f.h,
             index: n,
+            name: f._name,
         }
         listForPack.push(p);
     }
 
-    var packer = new MaxRectsBinPack.Packer(maxWidth, maxHeight, {
+    // maxWidth = 2048;
+    // maxHeight = 2048 * 2;
+    var packer = new MaxRectsPacking.Packer(maxWidth, maxHeight, {
         allowRotate: Config.rotated,
         pot: Config.mipmap,
         square: Config.square,
+
+        // freeSpaceWidth: 128,
+        // freeSpaceheight: 128,
+        // expandStepX: 128,
+        // expandStepY: 128,
     });
 
-    // var result = packer.insertRects(listForPack, MaxRectsBinPack.ShortSideFit);
-    // var result = packer.insertRects(listForPack, MaxRectsBinPack.LongSideFit);
-    // var result = packer.insertRects(listForPack, MaxRectsBinPack.AreaFit);
-    // var result = packer.insertRects(listForPack, MaxRectsBinPack.BottomLeft);
-    // var result = packer.insertRects(listForPack, MaxRectsBinPack.ContactPoint);
-    var result = packer.insertRects(listForPack, /* try all */);
+    var rule;
+
+    // rule = MaxRectsPacking.ShortSideFit;
+    // rule = MaxRectsPacking.LongSideFit;
+    // rule = MaxRectsPacking.AreaFit;
+    // rule = MaxRectsPacking.BottomLeft;
+    // rule = MaxRectsPacking.ContactPoint;
+
+    var result = packer.fit(listForPack, rule);
 
     if (result.done) {
 
         result.rects.forEach(function(r) {
             var idx = r.index;
-            var p = r.packedInfo;
-            var rotated = p.rotated;
+            var f = r.fitInfo || r.packedInfo;
             var info = imgInfoList[idx];
-            info.x = p.x;
-            info.y = p.y;
-            info.rotated = p.rotated;
+            info.x = f.x;
+            info.y = f.y;
+            info.rotated = f.rotated;
+            // console.log(r.name)
         });
 
         return {
@@ -1052,7 +1062,7 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
             height: result.height,
             rects: result.rects,
             packedCount: result.packedCount,
-            ruleName: result.rule,
+            ruleName: result.packRule + '-' + result.sortRule,
         };
     }
     return null;
@@ -1067,8 +1077,8 @@ function packImages(imgInfoList, size, outputFile, cb) {
     var ruleName = size[2];
 
     // if (Config.mipmap) {
-    //     width = Math.pow(2, Math.ceil(Math.log(width) / Math.log(2)));
-    //     height = Math.pow(2, Math.ceil(Math.log(height) / Math.log(2)));
+    //     width = Math.pow(2, Math.ceil(Math.log(width) / Math.LOG2E));
+    //     height = Math.pow(2, Math.ceil(Math.log(height) / Math.LOG2E));
     // }
 
     var cmd = ['magick convert',
@@ -1087,7 +1097,8 @@ function packImages(imgInfoList, size, outputFile, cb) {
         var ox = 0;
         var oy = rotated ? -imgInfo.h : 0;
 
-        cmd = cmd.concat(drawImage(imgInfo.imgFile, x, y, rotation, ox, oy));
+        var mn = Path.basename(imgInfo._name, ".png");
+        cmd = cmd.concat(drawImage(imgInfo.imgFile, x, y, rotation, ox, oy, mn));
 
         // cmd = cmd.concat(strokeRect(imgInfo.x, imgInfo.y, imgInfo.w, imgInfo.h, 2, "red"));
         // cmd = cmd.concat(fillText(imgInfo.index, imgInfo.x + 4, imgInfo.y + 16, 16, 'SourceSansProL'));
@@ -1118,11 +1129,16 @@ function packImages(imgInfoList, size, outputFile, cb) {
 
     callCmd(cmd.join(' '), function(err) {
         readImageSize(outputFile, function(w, h) {
-            var stats = fs.statSync(outputFile);
-            var fileSizeInBytes = stats["size"];
-            var kb = (fileSizeInBytes / 1000).toFixed(2)
+            // var stats = fs.statSync(outputFile);
+            // var fileSizeInBytes = stats["size"];
+            // var kb = (fileSizeInBytes / 1000).toFixed(2)
             console.log("\n");
-            console.log("==== packed: " + outputFile + " ( " + ruleName + " ) ---- " + w + " * " + h + " , " + kb + "kb" + " ====");
+            var ram = Math.round(w * h * 4 / 1024);
+            console.log("==== packed: " + outputFile + " ( " + ruleName + " ) ---- " +
+                w + " * " + h + " = " + (w * h) +
+                " , RAM: " + ram + "KB" +
+                // " , FileSize: " + kb + "KB" +
+                " ====");
             console.log('    { id: "' + outputFile + '", src: "' + outputFile + '.png" }');
             console.log("\n");
             if (Config.optipng) {
@@ -1156,7 +1172,7 @@ function computeImageAnchor(imageInfo) {
 }
 
 
-function drawImage(img, x, y, rotation, ox, oy) {
+function drawImage(img, x, y, rotation, ox, oy, text) {
 
     ox = ox || 0;
     oy = oy || 0;
@@ -1170,6 +1186,10 @@ function drawImage(img, x, y, rotation, ox, oy) {
         ox + ',' + oy,
         0 + ',' + 0,
         '\\"' + img + '\\"',
+        !text ? "" :
+        ('rotate -' + rotation +
+            ' font-size 14' +
+            ' text ' + 1 + ',' + 14 + ' \\"' + text + '\\"'),
         '"'
     ];
 
