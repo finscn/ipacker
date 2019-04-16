@@ -1097,8 +1097,8 @@ function packImages(imgInfoList, size, outputFile, cb) {
         var ox = 0;
         var oy = rotated ? -imgInfo.h : 0;
 
-        var mn = Path.basename(imgInfo._name, ".png");
-        cmd = cmd.concat(drawImage(imgInfo.imgFile, x, y, rotation, ox, oy, mn));
+        var text = null; // Path.basename(imgInfo._name, ".png");
+        cmd = cmd.concat(drawImage(imgInfo.imgFile, x, y, rotation, ox, oy, text));
 
         // cmd = cmd.concat(strokeRect(imgInfo.x, imgInfo.y, imgInfo.w, imgInfo.h, 2, "red"));
         // cmd = cmd.concat(fillText(imgInfo.index, imgInfo.x + 4, imgInfo.y + 16, 16, 'SourceSansProL'));
