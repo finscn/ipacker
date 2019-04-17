@@ -9,7 +9,7 @@ var program = require('commander');
 var plist = require('plist');
 
 
-var MaxRectsPacking = require('./lib/MaxRectsPacking');
+var MaxRectsPacking = require('max-rects-packing');
 
 
 var MAX_PACK_WIDTH = 2048;

@@ -1,3 +1,7 @@
-node ../../ipacker.js --input ./input --output ./output --trim --margin 2 --pack --pattern 'prefix-{dir[0]-}{dir[1]-}{dir[2]-}{lastDir-}{name}-suffix' --name all-pack
+node ../../src/ipacker.js --input ./input --output ./output --trim --margin 2 --pack --pattern 'prefix-{dir[0]-}{dir[1]-}{dir[2]-}{lastDir-}{name}-suffix' --name all-pack
 
-node ../ipacker.js  -p 1 --name all-in-one
+
+node ../src/ipacker.js  -p 1 --name all-in-one
+
+
+node ../../src/ipacker.js --input ./input --output ./output --pack --name packed-texture --plist --maxSize 2048,2048 --trim --margin 0 --extrude 1 --mipmap --square --rotated
