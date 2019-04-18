@@ -1,6 +1,6 @@
 {
   "name": "ipacker",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "A node.js tools for packing some images into one.",
   "author": "finscn <finscn@gmail.com>",
   "license": "MIT",
@@ -21,7 +21,7 @@
     "commander": "^2.20.0",
     "fs-extra": "^7.0.1",
     "glob": "^7.1.3",
-    "max-rects-packing": "^0.0.3",
+    "max-rects-packing": "^0.1.2",
     "plist": "^3.0.1"
   }
 }

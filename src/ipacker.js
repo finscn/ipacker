@@ -1028,6 +1028,7 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
         allowRotate: Config.rotated,
         pot: Config.mipmap,
         square: Config.square,
+        findBestRect: null,
 
         // freeSpaceWidth: 128,
         // freeSpaceheight: 128,
@@ -1062,7 +1063,7 @@ function computePackInfo(imgInfoList, maxWidth, maxHeight) {
             height: result.height,
             rects: result.rects,
             packedCount: result.packedCount,
-            ruleName: result.packRule + '-' + result.sortRule,
+            ruleName: result.packRule + '-' + result.sortRule + '-' + result.findBestRect,
         };
     }
     return null;
