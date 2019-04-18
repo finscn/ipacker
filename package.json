@@ -1,6 +1,6 @@
 {
   "name": "ipacker",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "A node.js tools for packing some images into one.",
   "author": "finscn <finscn@gmail.com>",
   "license": "MIT",
