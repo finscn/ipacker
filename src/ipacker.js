@@ -1133,13 +1133,20 @@ function packImages(imgInfoList, size, outputFile, cb) {
             // var stats = fs.statSync(outputFile);
             // var fileSizeInBytes = stats["size"];
             // var kb = (fileSizeInBytes / 1000).toFixed(2)
+
+            var potW = Math.pow(2, Math.ceil(Math.log(w) * Math.LOG2E));
+            var potH = Math.pow(2, Math.ceil(Math.log(h) * Math.LOG2E));
+
             console.log("\n");
             var ram = Math.round(w * h * 4 / 1024);
-            console.log("==== packed: " + outputFile + " ( " + ruleName + " ) ---- " +
-                w + " * " + h + " = " + (w * h) +
-                " , RAM: " + ram + "KB" +
-                // " , FileSize: " + kb + "KB" +
-                " ====");
+            var potRAM = Math.round(potW * potH * 4 / 1024);
+            console.log("==== packed: " + outputFile + " ( " + ruleName + " ) ====");
+
+            console.log("           " + w + " * " + h + " = " + (w * h) +
+                " , RAM: " + ram + "KB");
+            console.log("      POT: " + potW + " * " + potH + " = " + (potW * potH) +
+                " , RAM: " + potRAM + "KB");
+
             console.log('    { id: "' + outputFile + '", src: "' + outputFile + '.png" }');
             console.log("\n");
             if (Config.optipng) {
