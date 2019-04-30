@@ -21,7 +21,7 @@
     "commander": "^2.20.0",
     "fs-extra": "^7.0.1",
     "glob": "^7.1.3",
-    "max-rects-packing": "^0.1.7",
+    "max-rects-packing": "^0.1.8",
     "plist": "^3.0.1"
   }
 }
